@@ -1,0 +1,199 @@
+@import 'tailwindcss';
+
+/**
+ * ΕΝΤΑΞΕΙ — design tokens
+ *
+ * Ο τόνος του brand είναι «ηρέμησε». Άρα: ζεστά ουδέτερα αντί για
+ * ψυχρό γκρι, ένα βαθύ πράσινο-πετρόλ αντί για το συνηθισμένο SaaS
+ * μπλε, και άφθονο λευκό χώρο. Ο χρήστης έρχεται αγχωμένος από ένα
+ * email της ΑΑΔΕ — η οθόνη δεν πρέπει να προσθέτει άγχος.
+ */
+
+@theme {
+  /* Ζεστά ουδέτερα */
+  --color-paper: #faf9f7;
+  --color-surface: #ffffff;
+  --color-line: #e7e5e1;
+  --color-line-strong: #d6d3ce;
+
+  --color-ink: #1a1a18;
+  --color-ink-soft: #57534e;
+  --color-ink-muted: #8a857e;
+
+  /* Brand */
+  --color-brand: #0f766e;
+  --color-brand-dark: #115e56;
+  --color-brand-light: #f0fdfa;
+
+  /* Καταστάσεις */
+  --color-warn: #b45309;
+  --color-warn-bg: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-ok: #15803d;
+  --color-ok-bg: #f0fdf4;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  --radius-card: 0.875rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ελληνικά: λίγο πιο ανοιχτό tracking βοηθά την αναγνωσιμότητα */
+  h1, h2, h3 {
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/**
+ * ⚠️ Tailwind v4: το `@apply` δέχεται ΜΟΝΟ utilities — όχι custom κλάσεις
+ * ορισμένες μέσα σε `@layer components`. Το `.btn-primary { @apply btn }`
+ * έριχνε το dev server με «Cannot apply unknown utility class btn».
+ *
+ * Η λύση του v4 είναι το `@utility`: ορίζει πραγματικό utility, άρα
+ * γίνεται και να το κάνεις @apply αλλού. Πρέπει να είναι top-level.
+ */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+         text-sm font-medium transition-colors disabled:opacity-50
+         disabled:cursor-not-allowed;
+}
+
+@utility notice {
+  @apply rounded-lg px-4 py-3 text-sm leading-relaxed;
+  border: 1px solid;
+}
+
+@layer components {
+  /* ── Κουμπιά ── */
+  .btn-primary {
+    @apply btn text-white;
+    background: var(--color-brand);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-dark);
+  }
+  .btn-secondary {
+    @apply btn bg-white;
+    color: var(--color-ink);
+    border: 1px solid var(--color-line-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-paper);
+  }
+  .btn-ghost {
+    @apply btn;
+    color: var(--color-ink-soft);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  .btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+
+  /* ── Κάρτες ── */
+  .card {
+    @apply bg-white p-6;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  /* ── Φόρμες ── */
+  .label {
+    @apply mb-1.5 block text-sm font-medium;
+    color: var(--color-ink);
+  }
+  .hint {
+    @apply mt-1.5 text-xs leading-relaxed;
+    color: var(--color-ink-muted);
+  }
+  .input {
+    @apply w-full rounded-lg bg-white px-3.5 py-2.5 text-sm transition-colors;
+    border: 1px solid var(--color-line-strong);
+    color: var(--color-ink);
+  }
+  .input::placeholder {
+    color: var(--color-ink-muted);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 12%, transparent);
+  }
+  .input-error {
+    border-color: var(--color-danger);
+  }
+  .error-text {
+    @apply mt-1.5 text-xs;
+    color: var(--color-danger);
+  }
+
+  /* ── Ειδοποιήσεις ── */
+  .notice-info {
+    @apply notice;
+    background: var(--color-brand-light);
+    border-color: color-mix(in srgb, var(--color-brand) 22%, transparent);
+    color: var(--color-brand-dark);
+  }
+  .notice-warn {
+    @apply notice;
+    background: var(--color-warn-bg);
+    border-color: color-mix(in srgb, var(--color-warn) 28%, transparent);
+    color: var(--color-warn);
+  }
+  .notice-danger {
+    @apply notice;
+    background: var(--color-danger-bg);
+    border-color: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    color: var(--color-danger);
+  }
+  .notice-ok {
+    @apply notice;
+    background: var(--color-ok-bg);
+    border-color: color-mix(in srgb, var(--color-ok) 22%, transparent);
+    color: var(--color-ok);
+  }
+
+  /* ── Ετικέτες ── */
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-widest;
+    color: var(--color-brand);
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+           text-xs font-medium;
+  }
+
+  /* Αριθμοί παραστατικών & ποσά: tabular ώστε να στοιχίζονται */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}

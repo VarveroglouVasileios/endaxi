@@ -1,0 +1,20 @@
+{
+  // Τα tests και τα scripts δεν πέφτουν σε κανένα από τα tsconfig που
+  // παράγει το Nuxt (καλύπτουν app/, server/, shared/, nuxt.config).
+  // Χωρίς αυτό, σφάλματα τύπων στα ίδια τα tests περνούν απαρατήρητα.
+  //
+  // Κληρονομεί από το server config ώστε να βλέπει τα Nitro auto-imports
+  // των αρχείων του server/ που εισάγουν τα tests.
+  // Δεν είναι composite επίτηδες: δεν θέλουμε να μπει στο `nuxt typecheck`
+  // build graph, τρέχει ξεχωριστά με `pnpm typecheck:test`.
+  "extends": "./.nuxt/tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts",
+    "drizzle.config.ts"
+  ]
+}

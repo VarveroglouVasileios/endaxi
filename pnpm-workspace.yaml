@@ -1,0 +1,15 @@
+# Ρυθμίσεις pnpm (v11)
+#
+# Από το pnpm 11 τα settings ΔΕΝ διαβάζονται πια από το package.json —
+# ζουν εδώ. Επίσης το `onlyBuiltDependencies` καταργήθηκε και
+# αντικαταστάθηκε από το `allowBuilds` (map: πακέτο → true/false).
+#
+# Το pnpm μπλοκάρει τα postinstall scripts by default, που είναι σωστό:
+# είναι πραγματικός φορέας supply-chain επιθέσεων. Εγκρίνουμε ρητά
+# μόνο όσα τα χρειάζονται πραγματικά.
+
+allowBuilds:
+  # Κατεβάζει το native binary του. Χωρίς αυτό δεν τρέχει vite ούτε vitest.
+  esbuild: true
+  # Χτίζει τα runtime types του — το χρησιμοποιεί το inngest.
+  protobufjs: true

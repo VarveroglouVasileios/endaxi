@@ -1,0 +1,51 @@
+{
+  "name": "endaxi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Είσαι εντάξει. — Compliance autopilot για βραχυχρόνια μίσθωση",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "tsx scripts/demo.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:verify": "tsx scripts/verify-integrity.ts",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+    "typecheck:test": "vue-tsc --noEmit -p tsconfig.test.json",
+    "verify": "pnpm typecheck && pnpm typecheck:test && pnpm test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "aws4fetch": "^1.0.20",
+    "better-auth": "^1.2.7",
+    "drizzle-orm": "^0.45.2",
+    "inngest": "^4.13.0",
+    "node-ical": "^0.27.1",
+    "pdfmake": "^0.3.11",
+    "postgres": "^3.4.9",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.10.5",
+    "@types/pdfmake": "^0.3.3",
+    "drizzle-kit": "^0.31.10",
+    "nuxt": "^4.5.1",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^2.2.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

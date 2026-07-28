@@ -1,0 +1,12 @@
+{
+  // Το Nuxt 4 παράγει ξεχωριστά tsconfig ανά περιβάλλον (app / server /
+  // shared / node). Αυτό εδώ είναι μόνο ο κόμβος που τα ενώνει — χωρίς
+  // αυτό το `nuxt typecheck` σκάει με «Cannot find matching tsconfig.json».
+  "files": [],
+  "references": [
+    { "path": "./.nuxt/tsconfig.app.json" },
+    { "path": "./.nuxt/tsconfig.server.json" },
+    { "path": "./.nuxt/tsconfig.shared.json" },
+    { "path": "./.nuxt/tsconfig.node.json" }
+  ]
+}
