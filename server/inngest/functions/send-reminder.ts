@@ -73,7 +73,12 @@ export const sendReminderEmail = inngest.createFunction(
 
     const result = await step.run('send', async () => {
       if (!isEmailConfigured()) {
-        console.warn('[reminder] Resend δεν είναι ρυθμισμένο — παράλειψη')
+        console.error('[reminder] EMAIL_NOT_CONFIGURED', {
+          status: 'email_not_configured',
+          userId,
+          period,
+          environment: process.env.NODE_ENV,
+        })
         return { sent: false, reason: 'email_not_configured' as const }
       }
 

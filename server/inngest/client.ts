@@ -17,6 +17,13 @@ if (isProduction && process.env.INNGEST_DEV === '1') {
   throw new Error('INNGEST_DEV cannot be enabled in production')
 }
 
+// Defense-in-depth: το 00.production-config.ts απαιτεί ήδη αυτά τα env vars
+// στο boot, αλλά το client module πρέπει να αποτυγχάνει άμεσα κι από μόνο
+// του — χωρίς signing key, τα incoming webhooks δεν επαληθεύονται καθόλου.
+if (isProduction && !process.env.INNGEST_SIGNING_KEY) {
+  throw new Error('INNGEST_SIGNING_KEY is required in production')
+}
+
 const isDev = !isProduction && (
   process.env.INNGEST_DEV === '1' || process.env.NODE_ENV === 'development'
 )

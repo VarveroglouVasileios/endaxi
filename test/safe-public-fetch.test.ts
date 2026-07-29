@@ -3,6 +3,7 @@ import {
   fetchPublicText,
   isPublicIpAddress,
   PublicFetchError,
+  readTextWithLimit,
 } from '../server/utils/http/safe-public-fetch'
 
 describe('safe public fetch', () => {
@@ -46,5 +47,58 @@ describe('safe public fetch', () => {
     await expect(
       fetchPublicText(url, { maxBytes: 1024, timeoutMs: 100 }),
     ).rejects.toMatchObject({ code: 'bad_url' } satisfies Partial<PublicFetchError>)
+  })
+
+  describe('readTextWithLimit (gzip-bomb protection)', () => {
+    function fakeResponse(chunks: Uint8Array[], headers: Record<string, string> = {}) {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk)
+          controller.close()
+        },
+      })
+      return new Response(stream, { headers })
+    }
+
+    it('rejects a body that streams past maxBytes even with no Content-Length', async () => {
+      // Προσομοιώνει gzip bomb: το undici έχει ήδη αποσυμπιέσει το σώμα,
+      // οπότε δεν υπάρχει αξιόπιστο Content-Length να το προλάβει νωρίς —
+      // πρέπει να το πιάσει το ίδιο το streaming loop.
+      const maxBytes = 1024
+      const bigChunk = new Uint8Array(maxBytes + 1).fill(65)
+      const response = fakeResponse([bigChunk])
+
+      await expect(readTextWithLimit(response, maxBytes)).rejects.toMatchObject({
+        code: 'too_large',
+      } satisfies Partial<PublicFetchError>)
+    })
+
+    it('rejects a body that exceeds maxBytes only after several small chunks', async () => {
+      const maxBytes = 100
+      const chunks = Array.from({ length: 20 }, () => new Uint8Array(10).fill(66))
+      const response = fakeResponse(chunks)
+
+      await expect(readTextWithLimit(response, maxBytes)).rejects.toMatchObject({
+        code: 'too_large',
+      } satisfies Partial<PublicFetchError>)
+    })
+
+    it('rejects up front when a lying Content-Length declares an oversized body', async () => {
+      const maxBytes = 1024
+      const response = fakeResponse([new Uint8Array(10)], {
+        'content-length': String(maxBytes * 10),
+      })
+
+      await expect(readTextWithLimit(response, maxBytes)).rejects.toMatchObject({
+        code: 'too_large',
+      } satisfies Partial<PublicFetchError>)
+    })
+
+    it('accepts a body within the limit', async () => {
+      const maxBytes = 1024
+      const response = fakeResponse([new Uint8Array(10).fill(67)])
+
+      await expect(readTextWithLimit(response, maxBytes)).resolves.toContain('C')
+    })
   })
 })

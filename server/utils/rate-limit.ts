@@ -33,6 +33,15 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     window: '1 m',
     windowMs: 60_000,
   },
+  // Καλύπτει και το POST /api/ical-sources (δημιουργία πηγής) που κάνει
+  // πραγματικό εξωτερικό fetch στο iCal URL — χωρίς αυτό ήταν απεριόριστο.
+  {
+    id: 'ical-sources-minute',
+    prefix: '/api/ical-sources',
+    limit: 30,
+    window: '1 m',
+    windowMs: 60_000,
+  },
   {
     id: 'sign-in-minute',
     prefix: '/api/auth/sign-in',
@@ -74,6 +83,15 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     limit: 40,
     window: '1 d',
     windowMs: 86_400_000,
+  },
+  // Κάθε λήψη παράγει ένα signed R2 URL — χωρίς όριο ένας λογαριασμός θα
+  // μπορούσε να ζητά χιλιάδες signed URLs σε λίγα λεπτά.
+  {
+    id: 'documents-download-minute',
+    prefix: '/api/documents',
+    limit: 60,
+    window: '1 m',
+    windowMs: 60_000,
   },
 ] as const
 

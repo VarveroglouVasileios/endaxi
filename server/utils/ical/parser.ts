@@ -140,6 +140,21 @@ export function detectPlatform(url: string): IcalPlatform {
 }
 
 /**
+ * Ένα πραγματικό ακίνητο βραχυχρόνιας μίσθωσης δεν έχει ποτέ χιλιάδες
+ * κρατήσεις σε ένα feed. Πάνω από αυτό το όριο είναι σχεδόν σίγουρα
+ * παθολογικό/κακόβουλο feed — defense-in-depth ενάντια σε CPU/memory
+ * εξάντληση κατά το parsing ή το επακόλουθο diff/insert.
+ */
+export const MAX_PARSED_EVENTS = 2000
+
+export class IcalTooManyEventsError extends Error {
+  constructor(public readonly count: number) {
+    super(`Το iCal feed έχει ${count} VEVENT — υπερβαίνει το όριο ${MAX_PARSED_EVENTS}.`)
+    this.name = 'IcalTooManyEventsError'
+  }
+}
+
+/**
  * Parse ενός iCal feed σε ParsedEvent[].
  *
  * Χρησιμοποιεί node-ical. Ο import γίνεται δυναμικά ώστε η συνάρτηση
@@ -154,6 +169,10 @@ export async function parseIcalFeed(icsText: string): Promise<ParsedEvent[]> {
   for (const key of Object.keys(parsed)) {
     const item = parsed[key] as Record<string, unknown>
     if (item?.type !== 'VEVENT') continue
+
+    if (events.length >= MAX_PARSED_EVENTS) {
+      throw new IcalTooManyEventsError(Object.keys(parsed).length)
+    }
 
     const start = item.start as Date | undefined
     const end = item.end as Date | undefined

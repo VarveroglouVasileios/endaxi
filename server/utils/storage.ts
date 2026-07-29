@@ -58,8 +58,29 @@ function client(): AwsClient {
   return _client
 }
 
+// Μόνο γράμματα/αριθμοί ανά τμήμα διαδρομής — καμία `/`, `.` ή άλλος
+// χαρακτήρας που θα μπορούσε να «σπάσει» έξω από το UUID-scoped δέντρο
+// του χρήστη (π.χ. path traversal μέσω του `documentSeries`).
+const SAFE_KEY_SEGMENT = /^[\p{L}\p{N}]+$/u
+
+function assertSafeKeySegment(segment: string, field: string): string {
+  if (!SAFE_KEY_SEGMENT.test(segment)) {
+    throw new StorageError(`Μη έγκυρο τμήμα κλειδιού αποθήκευσης (${field}): "${segment}"`)
+  }
+  return segment
+}
+
 function endpoint(key: string): string {
   const c = config()
+  // Defense-in-depth: κάθε τμήμα της διαδρομής πρέπει να είναι "ασφαλές" —
+  // αποτρέπει path traversal ακόμα κι αν ένα κλειδί φτάσει εδώ χωρίς να
+  // έχει περάσει από `takkDocumentKey()`.
+  const segments = key.split('/')
+  for (const segment of segments) {
+    if (segment === '' || segment === '.' || segment === '..') {
+      throw new StorageError(`Μη έγκυρο κλειδί αποθήκευσης: "${key}"`)
+    }
+  }
   return `https://${c.accountId}.r2.cloudflarestorage.com/${c.bucket}/${key}`
 }
 
@@ -74,8 +95,9 @@ export function takkDocumentKey(params: {
   series: string
   number: number
 }): string {
+  const series = assertSafeKeySegment(params.series, 'series')
   const n = String(params.number).padStart(7, '0')
-  return `takk/${params.userId}/${params.propertyId}/${params.year}/${params.series}-${n}.pdf`
+  return `takk/${params.userId}/${params.propertyId}/${params.year}/${series}-${n}.pdf`
 }
 
 /** Ανεβάζει PDF. Επιστρέφει το κλειδί. */

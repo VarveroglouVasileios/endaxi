@@ -15,7 +15,15 @@ import { getTrustedClientIp } from '../../utils/request-ip'
 const bodySchema = z.object({
   name: z.string().min(2).max(120).optional(),
   afm: z.string().max(20).optional(),
-  phone: z.string().max(30).optional(),
+  // Κενό string επιτρέπεται — σημαίνει «καθάρισε το τηλέφωνο» (βλ. παρακάτω).
+  phone: z
+    .string()
+    .max(30)
+    .refine(
+      value => value.trim() === '' || /^[+0-9 ()-]{6,30}$/.test(value.trim()),
+      'Μη έγκυρη μορφή τηλεφώνου',
+    )
+    .optional(),
   legalAddressLine: z.string().min(3).max(300).optional(),
   legalAddressCity: z.string().min(2).max(120).optional(),
   legalAddressPostalCode: z.string().min(4).max(20).optional(),

@@ -5,6 +5,18 @@ import { properties, users, auditLog } from '../../database/schema'
 import { checkAddProperty } from '../../utils/gate'
 import { getTrustedClientIp } from '../../utils/request-ip'
 
+/** Postgres unique_violation (23505) στον global index `properties_ama_idx`. */
+function isUniqueAmaViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === '23505'
+    && 'constraint_name' in error
+    && error.constraint_name === 'properties_ama_idx'
+  )
+}
+
 const bodySchema = z.object({
   ama: z.string().min(1, 'Ο ΑΜΑ είναι υποχρεωτικός').max(64),
   name: z.string().min(1).max(200),
@@ -15,7 +27,9 @@ const bodySchema = z.object({
   city: z.string().min(2, 'Η πόλη είναι υποχρεωτική').max(120),
   postalCode: z.string().min(4, 'Ο Τ.Κ. είναι υποχρεωτικός').max(20),
   areaSqm: z.number().int().positive().max(10_000).optional(),
-  documentSeries: z.string().min(1).max(5).default('Α'),
+  // Χρησιμοποιείται ως τμήμα του R2 storage key (server/utils/storage.ts) —
+  // μόνο γράμματα/αριθμοί, ώστε να μην είναι δυνατό path traversal.
+  documentSeries: z.string().regex(/^[\p{L}\p{N}]{1,5}$/u, 'Η σειρά επιτρέπει μόνο γράμματα και αριθμούς').default('Α'),
 })
 
 export default defineEventHandler(async (event) => {
@@ -66,22 +80,42 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const [property] = await tx
-      .insert(properties)
-      .values({ userId, ...body })
-      .returning()
+    let property: typeof properties.$inferSelect | undefined
+    try {
+      ;[property] = await tx
+        .insert(properties)
+        .values({ userId, ...body })
+        .returning()
+    } catch (error) {
+      if (isUniqueAmaViolation(error)) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'AMA_TAKEN',
+          data: {
+            message:
+              'Αυτός ο ΑΜΑ είναι ήδη καταχωρημένος σε άλλο λογαριασμό. ' +
+              'Επικοινώνησε μαζί μας αν πιστεύεις ότι πρόκειται για λάθος.',
+          },
+        })
+      }
+      throw error
+    }
+
+    if (!property) {
+      throw createError({ statusCode: 500, message: 'Αποτυχία δημιουργίας ακινήτου' })
+    }
 
     await tx.insert(auditLog).values({
       userId,
       action: 'property.created',
       entityType: 'property',
-      entityId: property!.id,
+      entityId: property.id,
       metadata: { ama: body.ama, propertyCount: propertyCount + 1 },
       ipAddress,
       userAgent,
     })
 
-    return property!
+    return property
   })
 
   setResponseStatus(event, 201)

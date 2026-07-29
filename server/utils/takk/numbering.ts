@@ -489,10 +489,15 @@ export async function verifySeriesIntegrity(
     .orderBy(takkDocuments.number)
 
   const numbers = docs.map((d) => d.number)
+  // Set αντί για numbers.includes() μέσα στο loop — αλλιώς είναι O(n²)
+  // και σε ακίνητο με χιλιάδες παραστατικά καθυστερεί αδικαιολόγητα ενώ
+  // κρατά ανοιχτή σύνδεση από το pool (βλ. statement_timeout στο
+  // server/database/client.ts για το δεύτερο επίπεδο προστασίας).
+  const numberSet = new Set(numbers)
   const gaps: number[] = []
 
   for (let i = 1; i <= (numbers.at(-1) ?? 0); i++) {
-    if (!numbers.includes(i)) gaps.push(i)
+    if (!numberSet.has(i)) gaps.push(i)
   }
 
   return {

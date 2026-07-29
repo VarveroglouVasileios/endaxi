@@ -78,11 +78,22 @@ function parseAllowedUrl(rawUrl: string, base?: URL): URL {
 }
 
 async function resolvePublicAddresses(hostname: string): Promise<ResolvedAddress[]> {
-  if (ipaddr.isValid(hostname)) {
-    if (!isPublicIpAddress(hostname)) {
+  // Το URL API κρατά τις αγκύλες σε IPv6 literals (π.χ. "[::1]") μέσα στο
+  // `.hostname` — το ipaddr.js δεν τις αναγνωρίζει, οπότε χωρίς αυτό ένα
+  // bracketed IPv6 literal θα προσπερνούσε τον έλεγχο ιδιωτικής διεύθυνσης
+  // και θα κατέληγε (αποτυχημένα) σαν DNS lookup αντί να μπλοκαριστεί ρητά.
+  const unbracketed
+    = hostname.length >= 2 && hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname
+
+  if (ipaddr.isValid(unbracketed)) {
+    if (!isPublicIpAddress(unbracketed)) {
       throw new PublicFetchError('blocked_target', 'Δεν επιτρέπεται ιδιωτική διεύθυνση.')
     }
-    return [{ address: hostname, family: ipaddr.parse(hostname).kind() === 'ipv6' ? 6 : 4 }]
+    return [
+      { address: unbracketed, family: ipaddr.parse(unbracketed).kind() === 'ipv6' ? 6 : 4 },
+    ]
   }
 
   let addresses: ResolvedAddress[]
@@ -107,8 +118,20 @@ async function resolvePublicAddresses(hostname: string): Promise<ResolvedAddress
   return addresses
 }
 
-async function readTextWithLimit(
-  response: Awaited<ReturnType<typeof fetch>>,
+/**
+ * Exported μόνο για tests: επιτρέπει να ελεγχθεί το byte-counting loop
+ * απευθείας με ένα φτιαχτό Response — π.χ. gzip bomb όπου το undici έχει
+ * ήδη αποσυμπιέσει το σώμα και το πραγματικό μέγεθος είναι πολύ
+ * μεγαλύτερο από ό,τι δηλώνει (ή δεν δηλώνει καθόλου) το Content-Length.
+ */
+/** Minimal response shape — accepts undici or global/web Response in tests. */
+type LimitedTextResponse = {
+  headers: { get(name: string): string | null }
+  body: ReadableStream<Uint8Array> | null
+}
+
+export async function readTextWithLimit(
+  response: LimitedTextResponse,
   maxBytes: number,
 ): Promise<string> {
   const declaredLength = Number(response.headers.get('content-length') ?? 0)

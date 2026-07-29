@@ -136,8 +136,15 @@ export const deliverTakkDocument = inngest.createFunction(
     // ── 3. Αποθήκευση στο R2 ──
     const storageKey = await step.run('store-pdf', async () => {
       if (!isStorageConfigured()) {
-        // Σε dev χωρίς R2 δεν μπλοκάρουμε τη ροή
-        console.warn('[deliver] R2 δεν είναι ρυθμισμένο — παράλειψη αποθήκευσης')
+        // Σε dev χωρίς R2 δεν μπλοκάρουμε τη ροή — αλλά σε production αυτό
+        // σημαίνει ότι ΚΑΝΕΝΑ PDF δεν αποθηκεύεται πουθενά: πρέπει να είναι
+        // ορατό, όχι θαμμένο σε ένα warn ανάμεσα σε χιλιάδες γραμμές logs.
+        console.error('[deliver] STORAGE_NOT_CONFIGURED', {
+          status: 'storage_not_configured',
+          documentId: doc.id,
+          propertyId: property.id,
+          environment: process.env.NODE_ENV,
+        })
         return null
       }
 

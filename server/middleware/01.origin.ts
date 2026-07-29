@@ -11,7 +11,15 @@ export default defineEventHandler((event) => {
   const origin = getHeader(event, 'origin')
   const fetchSite = getHeader(event, 'sec-fetch-site')
 
-  if ((origin && origin !== allowedOrigin) || fetchSite === 'cross-site') {
+  // Σε development επιτρέπεται localhost ώστε να δουλεύει τοπικά χωρίς να αλλάξεις
+  // την NUXT_PUBLIC_APP_URL (που πρέπει να δείχνει στο production URL).
+  const isDev = process.env.NODE_ENV !== 'production'
+  const isLocalhostOrigin
+    = isDev
+    && origin != null
+    && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+
+  if (!isLocalhostOrigin && ((origin && origin !== allowedOrigin) || fetchSite === 'cross-site')) {
     throw createError({
       statusCode: 403,
       statusMessage: 'ORIGIN_NOT_ALLOWED',

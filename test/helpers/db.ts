@@ -135,7 +135,7 @@ export async function createSchema(db: TestDb): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
-    CREATE UNIQUE INDEX properties_user_ama_idx ON properties (user_id, ama);
+    CREATE UNIQUE INDEX properties_ama_idx ON properties (ama);
 
     CREATE TABLE ical_sources (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -214,7 +214,7 @@ export async function createSchema(db: TestDb): Promise<void> {
       rate_per_night_cents integer NOT NULL,
       total_amount_cents integer NOT NULL,
       remittance_period text NOT NULL,
-      cancels_document_id uuid,
+      cancels_document_id uuid REFERENCES takk_documents(id) ON DELETE RESTRICT,
       cancellation_reason text,
       pdf_storage_key text,
       sent_to_guest_at timestamptz,
@@ -243,6 +243,7 @@ export async function createSchema(db: TestDb): Promise<void> {
       user_agent text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE INDEX audit_log_created_at_idx ON audit_log (created_at);
   `)
 }
 

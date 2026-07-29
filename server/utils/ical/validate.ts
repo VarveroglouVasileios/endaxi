@@ -8,7 +8,12 @@
  */
 
 import { fetchPublicText, PublicFetchError } from '../http/safe-public-fetch'
-import { parseIcalFeed, detectPlatform, type IcalPlatform } from './parser'
+import {
+  parseIcalFeed,
+  detectPlatform,
+  IcalTooManyEventsError,
+  type IcalPlatform,
+} from './parser'
 
 export interface ValidationResult {
   ok: boolean
@@ -108,7 +113,19 @@ export async function validateIcalUrl(rawUrl: string): Promise<ValidationResult>
   }
 
   // ── Parsing ──
-  const events = await parseIcalFeed(text)
+  let events: Awaited<ReturnType<typeof parseIcalFeed>>
+  try {
+    events = await parseIcalFeed(text)
+  } catch (error) {
+    if (error instanceof IcalTooManyEventsError) {
+      return fail(
+        'not_ical',
+        'Αυτό το ημερολόγιο έχει ασυνήθιστα μεγάλο αριθμό εγγραφών — επικοινώνησε μαζί μας.',
+        platform,
+      )
+    }
+    throw error
+  }
   const bookings = events.filter((e) => !e.isBlocked)
   const blocks = events.length - bookings.length
 

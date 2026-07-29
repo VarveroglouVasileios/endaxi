@@ -28,16 +28,20 @@ export default defineEventHandler(async (event) => {
     'X-Request-Id': requestId,
   })
 
+  // Ένα browser fetch() POST στέλνει ΠΑΝΤΑ Origin — η απουσία του δεν
+  // πρέπει να προσπερνά τον έλεγχο (θα άφηνε ανοιχτή μια «χωρίς Origin»
+  // παράκαμψη για μη-browser clients που τρώνε το Groq quota μας).
   const origin = getHeader(event, 'origin')
-  if (origin) {
-    const appOrigin = new URL(config.public.appUrl).origin
-    if (origin !== appOrigin) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: 'ORIGIN_NOT_ALLOWED',
-        data: { message: 'Το αίτημα δεν επιτρέπεται από αυτή την προέλευση.' },
-      })
-    }
+  const appOrigin = new URL(config.public.appUrl).origin
+  // Σε development επιτρέπεται και το localhost ώστε να δουλεύει τοπικά.
+  const isDev = process.env.NODE_ENV !== 'production'
+  const isLocalhost = isDev && origin != null && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  if (origin !== appOrigin && !isLocalhost) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'ORIGIN_NOT_ALLOWED',
+      data: { message: 'Το αίτημα δεν επιτρέπεται από αυτή την προέλευση.' },
+    })
   }
 
   if (!config.groqApiKey) {

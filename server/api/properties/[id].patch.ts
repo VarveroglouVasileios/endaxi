@@ -16,6 +16,18 @@ import { useDatabase } from '../../database/client'
 import { properties, takkDocuments, auditLog } from '../../database/schema'
 import { getTrustedClientIp } from '../../utils/request-ip'
 
+/** Postgres unique_violation (23505) στον global index `properties_ama_idx`. */
+function isUniqueAmaViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === '23505'
+    && 'constraint_name' in error
+    && error.constraint_name === 'properties_ama_idx'
+  )
+}
+
 const bodySchema = z.object({
   name: z.string().min(1).max(200).optional(),
   category: z.enum(['str_standard', 'str_villa']).optional(),
@@ -25,7 +37,9 @@ const bodySchema = z.object({
   areaSqm: z.number().int().positive().max(10_000).nullable().optional(),
   /** Μόνο πριν την πρώτη έκδοση */
   ama: z.string().min(1).max(64).optional(),
-  documentSeries: z.string().min(1).max(5).optional(),
+  // Χρησιμοποιείται ως τμήμα του R2 storage key (server/utils/storage.ts) —
+  // μόνο γράμματα/αριθμοί, ώστε να μην είναι δυνατό path traversal.
+  documentSeries: z.string().regex(/^[\p{L}\p{N}]{1,5}$/u, 'Η σειρά επιτρέπει μόνο γράμματα και αριθμούς').optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -96,11 +110,31 @@ export default defineEventHandler(async (event) => {
     if (body.documentSeries !== undefined) patch.documentSeries = body.documentSeries
   }
 
-  const [updated] = await db
-    .update(properties)
-    .set(patch)
-    .where(eq(properties.id, id))
-    .returning()
+  let updated: typeof properties.$inferSelect | undefined
+  try {
+    ;[updated] = await db
+      .update(properties)
+      .set(patch)
+      .where(eq(properties.id, id))
+      .returning()
+  } catch (error) {
+    if (isUniqueAmaViolation(error)) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'AMA_TAKEN',
+        data: {
+          message:
+            'Αυτός ο ΑΜΑ είναι ήδη καταχωρημένος σε άλλο λογαριασμό. ' +
+            'Επικοινώνησε μαζί μας αν πιστεύεις ότι πρόκειται για λάθος.',
+        },
+      })
+    }
+    throw error
+  }
+
+  if (!updated) {
+    throw createError({ statusCode: 404, message: 'Δεν βρέθηκε' })
+  }
 
   await db.insert(auditLog).values({
     userId,

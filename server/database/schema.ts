@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   index,
   bigint,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import type { NightBreakdown } from '../utils/takk/calculator'
@@ -205,7 +206,13 @@ export const properties = pgTable(
   },
   (t) => [
     index('properties_user_idx').on(t.userId),
-    uniqueIndex('properties_user_ama_idx').on(t.userId, t.ama),
+    /**
+     * Ο ΑΜΑ ταυτοποιεί το ακίνητο στο κρατικό μητρώο — 1:1 σχέση με
+     * φυσικό ακίνητο, ανεξάρτητα από ποιος χρήστης το καταχωρεί εδώ.
+     * Global uniqueness (όχι μόνο ανά χρήστη) αποτρέπει δύο λογαριασμούς
+     * να εκδίδουν παραστατικά για το ίδιο καταχωρημένο ακίνητο.
+     */
+    uniqueIndex('properties_ama_idx').on(t.ama),
   ],
 )
 
@@ -383,7 +390,8 @@ export const takkDocuments = pgTable(
     remittancePeriod: text('remittance_period').notNull(),
 
     /** Αν πρόκειται για αντιλογιστικό, δείχνει στο ακυρούμενο */
-    cancelsDocumentId: uuid('cancels_document_id'),
+    cancelsDocumentId: uuid('cancels_document_id')
+      .references((): AnyPgColumn => takkDocuments.id, { onDelete: 'restrict' }),
     cancellationReason: text('cancellation_reason'),
 
     pdfStorageKey: text('pdf_storage_key'),
@@ -441,6 +449,7 @@ export const auditLog = pgTable(
   (t) => [
     index('audit_log_user_idx').on(t.userId),
     index('audit_log_entity_idx').on(t.entityType, t.entityId),
+    index('audit_log_created_at_idx').on(t.createdAt),
   ],
 )
 
