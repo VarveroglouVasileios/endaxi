@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { properties, takkDocuments, auditLog } from '../../database/schema'
+import { getTrustedClientIp } from '../../utils/request-ip'
 
 const bodySchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -107,7 +108,7 @@ export default defineEventHandler(async (event) => {
     entityType: 'property',
     entityId: id,
     metadata: { fields: Object.keys(body), hadIssuedDocuments: hasIssued },
-    ipAddress: getRequestIP(event, { xForwardedFor: true }),
+    ipAddress: getTrustedClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent'),
   })
 

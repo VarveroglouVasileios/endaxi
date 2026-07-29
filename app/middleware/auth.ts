@@ -6,7 +6,7 @@ import { authClient } from '~/lib/auth-client'
 export default defineNuxtRouteMiddleware(async (to) => {
   const { data: session } = await authClient.useSession(useFetch)
 
-  if (!session.value) {
+  if (!session.value?.user.emailVerified) {
     return navigateTo(`/login?next=${encodeURIComponent(to.fullPath)}`)
   }
 })

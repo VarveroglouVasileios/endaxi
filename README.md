@@ -78,9 +78,9 @@ test/                      58 tests
 
 ```bash
 cp .env.example .env
-docker compose up -d      # τοπική Postgres στο :54329
+docker compose up -d      # dev DB :54329, απομονωμένη test DB :54330
 pnpm install
-pnpm test                 # 85 tests, μαζί με integration
+pnpm test                 # unit και ασφαλή integration tests
 pnpm demo                 # end-to-end: iCal → ΤΑΚΚ → PDF στο ./tmp
 pnpm dev
 pnpm inngest:dev          # σε δεύτερο terminal

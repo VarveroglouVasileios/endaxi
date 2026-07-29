@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { authClient } from '~/lib/auth-client'
-import { isValidEmail } from '../../shared/auth-validation'
+import { isValidEmail } from '#shared/auth-validation'
 
-useSeoMeta({ title: 'Επαναφορά κωδικού — Εντάξει', robots: 'noindex' })
+useSeoMeta({
+  title: 'Επαναφορά κωδικού — Endaxi',
+  description: 'Αίτημα ασφαλούς επαναφοράς κωδικού Endaxi.',
+  robots: 'noindex, nofollow',
+})
 
 const email = ref('')
 const emailTouched = ref(false)

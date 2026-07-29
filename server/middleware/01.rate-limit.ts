@@ -1,76 +1,39 @@
-/**
- * RATE LIMITING — απλό, in-memory, ανά IP.
- *
- * Στοχεύει τα endpoints που κοστίζουν ή εκτίθενται:
- *  · /api/ical-sources/validate — κάνει εξερχόμενο fetch (SSRF/abuse vector)
- *  · /api/auth/*                — brute force κωδικών
- *
- * ⚠️ ΠΕΡΙΟΡΙΣΜΟΣ: in-memory σημαίνει ότι σε πολλαπλά instances κάθε ένα
- *    έχει τον δικό του μετρητή. Για σοβαρό φορτίο θέλει Redis ή
- *    Cloudflare Rate Limiting μπροστά. Για MVP με ένα instance αρκεί.
- */
+import {
+  checkRateLimits,
+  createRateLimitIdentifier,
+  RATE_LIMIT_RULES,
+  RateLimitUnavailableError,
+} from '../utils/rate-limit'
+import { getTrustedClientIp } from '../utils/request-ip'
 
-interface Bucket {
-  count: number
-  resetAt: number
-}
-
-const buckets = new Map<string, Bucket>()
-
-/** Καθαρισμός παλιών εγγραφών ώστε να μη φουσκώνει η μνήμη */
-let lastSweep = Date.now()
-function sweep() {
-  const now = Date.now()
-  if (now - lastSweep < 60_000) return
-  lastSweep = now
-  for (const [k, b] of buckets) {
-    if (b.resetAt < now) buckets.delete(k)
-  }
-}
-
-interface Rule {
-  prefix: string
-  limit: number
-  windowMs: number
-}
-
-const RULES: Rule[] = [
-  // Κάνει εξερχόμενο HTTP request — το πιο ακριβό endpoint
-  { prefix: '/api/ical-sources/validate', limit: 20, windowMs: 60_000 },
-  // Brute force προστασία
-  { prefix: '/api/auth/sign-in', limit: 10, windowMs: 60_000 },
-  { prefix: '/api/auth/sign-up', limit: 5, windowMs: 60_000 },
-]
-
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const path = getRequestURL(event).pathname
-  const rule = RULES.find((r) => path.startsWith(r.prefix))
-  if (!rule) return
+  const rules = RATE_LIMIT_RULES.filter(rule => path.startsWith(rule.prefix))
+  if (rules.length === 0) return
 
-  sweep()
-
-  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
-  const key = `${rule.prefix}:${ip}`
-  const now = Date.now()
-
-  let b = buckets.get(key)
-  if (!b || b.resetAt < now) {
-    b = { count: 0, resetAt: now + rule.windowMs }
-    buckets.set(key, b)
+  let results
+  try {
+    const identifier = createRateLimitIdentifier(getTrustedClientIp(event) ?? 'unknown')
+    results = await checkRateLimits(rules, identifier)
+  } catch (error) {
+    if (!(error instanceof RateLimitUnavailableError)) throw error
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'RATE_LIMIT_UNAVAILABLE',
+      data: { message: 'Η υπηρεσία είναι προσωρινά μη διαθέσιμη. Δοκίμασε ξανά σε λίγο.' },
+    })
   }
 
-  b.count++
-
-  const remaining = Math.max(0, rule.limit - b.count)
+  const exceeded = results.find(result => !result.success)
+  const displayed = exceeded ?? results[0]!
   setResponseHeaders(event, {
-    'X-RateLimit-Limit': String(rule.limit),
-    'X-RateLimit-Remaining': String(remaining),
-    'X-RateLimit-Reset': String(Math.ceil(b.resetAt / 1000)),
+    'X-RateLimit-Limit': String(displayed.limit),
+    'X-RateLimit-Remaining': String(displayed.remaining),
+    'X-RateLimit-Reset': String(Math.ceil(displayed.reset / 1000)),
   })
 
-  if (b.count > rule.limit) {
-    const retryAfter = Math.ceil((b.resetAt - now) / 1000)
-    // Το h3 τυποποιεί το Retry-After ως number (RFC 9110: delta-seconds)
+  if (exceeded) {
+    const retryAfter = Math.max(1, Math.ceil((exceeded.reset - Date.now()) / 1000))
     setResponseHeader(event, 'Retry-After', retryAfter)
     throw createError({
       statusCode: 429,

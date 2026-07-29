@@ -13,6 +13,7 @@ import {
   bigint,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
+import type { NightBreakdown } from '../utils/takk/calculator'
 
 // ────────────────────────────────────────────────────────────
 // ENUMS
@@ -78,6 +79,9 @@ export const users = pgTable(
     afm: text('afm'), // ΑΦΜ — απαραίτητο στο παραστατικό
     phone: text('phone'),
     locale: text('locale').notNull().default('el'),
+    legalAddressLine: text('legal_address_line'),
+    legalAddressCity: text('legal_address_city'),
+    legalAddressPostalCode: text('legal_address_postal_code'),
 
     /**
      * ΚΡΙΣΙΜΟ GATE.
@@ -354,6 +358,14 @@ export const takkDocuments = pgTable(
     propertyName: text('property_name').notNull(),
     issuerName: text('issuer_name'),
     issuerAfm: text('issuer_afm'),
+    issuerAddressLine: text('issuer_address_line'),
+    issuerAddressCity: text('issuer_address_city'),
+    issuerAddressPostalCode: text('issuer_address_postal_code'),
+    propertyAddressLine: text('property_address_line'),
+    propertyCity: text('property_city'),
+    propertyPostalCode: text('property_postal_code'),
+    propertyCategory: propertyCategoryEnum('property_category_snapshot'),
+    rateBreakdown: jsonb('rate_breakdown').$type<NightBreakdown[]>(),
 
     checkIn: date('check_in').notNull(),
     checkOut: date('check_out').notNull(),
@@ -402,6 +414,9 @@ export const takkDocuments = pgTable(
     uniqueIndex('takk_documents_one_receipt_per_stay_month_idx')
       .on(t.stayId, t.remittancePeriod)
       .where(sql`document_type = 'takk_receipt'`),
+    uniqueIndex('takk_documents_one_cancellation_per_document_idx')
+      .on(t.cancelsDocumentId)
+      .where(sql`cancels_document_id is not null`),
     index('takk_documents_period_idx').on(t.propertyId, t.remittancePeriod),
   ],
 )

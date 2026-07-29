@@ -15,10 +15,10 @@ interface Readiness {
   nextCheckOut: string | null
 }
 
-const { data } = await useFetch<Readiness>('/api/me/readiness')
+const { data } = defineProps<{ data: Readiness | null }>()
 
 const urgent = computed(() => {
-  const d = data.value?.nextCheckOut
+  const d = data?.nextCheckOut
   return d ? daysUntil(d) <= 7 : false
 })
 </script>

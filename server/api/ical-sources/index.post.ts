@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { icalSources, properties, auditLog } from '../../database/schema'
 import { validateIcalUrl } from '../../utils/ical/validate'
+import { getTrustedClientIp } from '../../utils/request-ip'
 import { inngest } from '../../inngest/client'
 import { icalSyncRequested } from '../../inngest/events'
 
@@ -81,7 +82,17 @@ export default defineEventHandler(async (event) => {
       label: body.label ?? validation.platform,
       isActive: true,
     })
-    .returning()
+    .returning({
+      id: icalSources.id,
+      propertyId: icalSources.propertyId,
+      source: icalSources.source,
+      label: icalSources.label,
+      isActive: icalSources.isActive,
+      lastSyncedAt: icalSources.lastSyncedAt,
+      lastSyncStatus: icalSources.lastSyncStatus,
+      consecutiveFailures: icalSources.consecutiveFailures,
+      createdAt: icalSources.createdAt,
+    })
 
   await db.insert(auditLog).values({
     userId,
@@ -92,7 +103,7 @@ export default defineEventHandler(async (event) => {
       platform: validation.platform,
       bookingsFound: validation.bookings,
     },
-    ipAddress: getRequestIP(event, { xForwardedFor: true }),
+    ipAddress: getTrustedClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent'),
   })
 
@@ -112,7 +123,10 @@ export default defineEventHandler(async (event) => {
   try {
     await inngest.send(icalSyncRequested.create({ icalSourceId: created!.id }))
   } catch (err) {
-    console.error('[ical-sources] Αποτυχία άμεσου sync request (μη κρίσιμο):', err)
+    console.error('[ical-sources]', {
+      status: 'sync_dispatch_failed',
+      errorType: err instanceof Error ? err.name : 'UnknownError',
+    })
   }
 
   setResponseStatus(event, 201)

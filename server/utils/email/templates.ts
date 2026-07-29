@@ -11,6 +11,19 @@ const BRAND = '#0F766E'
 const INK = '#111827'
 const MUTED = '#6B7280'
 
+export function escapeEmailHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('\'', '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function safeSubjectText(value: string): string {
+  return value.replace(/[\r\n]+/gu, ' ').trim()
+}
+
 function shell(body: string): string {
   return `<!doctype html>
 <html lang="el"><head><meta charset="utf-8">
@@ -57,16 +70,20 @@ export interface GuestReceiptParams {
 }
 
 export function guestReceiptEmail(p: GuestReceiptParams) {
-  const greeting = p.guestName ? `Αγαπητέ/ή ${p.guestName},` : 'Καλησπέρα,'
+  const greetingText = p.guestName ? `Αγαπητέ/ή ${p.guestName},` : 'Καλησπέρα,'
+  const greetingHtml = p.guestName
+    ? `Αγαπητέ/ή ${escapeEmailHtml(p.guestName)},`
+    : 'Καλησπέρα,'
   const amount = formatCents(p.totalAmountCents)
+  const safePropertyName = escapeEmailHtml(p.propertyName)
 
-  const subject = `Απόδειξη Τέλους Ανθεκτικότητας — ${p.propertyName}`
+  const subject = `Απόδειξη Τέλους Ανθεκτικότητας — ${safeSubjectText(p.propertyName)}`
 
   const html = shell(`
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${greetingHtml}</p>
     <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
       Επισυνάπτεται η απόδειξη είσπραξης του Τέλους Ανθεκτικότητας στην
-      Κλιματική Κρίση για τη διαμονή σας στο <strong>${p.propertyName}</strong>.
+      Κλιματική Κρίση για τη διαμονή σας στο <strong>${safePropertyName}</strong>.
     </p>
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
       <tr><td style="padding:6px 0;color:${MUTED};">Άφιξη</td><td style="padding:6px 0;text-align:right;">${grDate(p.checkIn)}</td></tr>
@@ -82,7 +99,7 @@ export function guestReceiptEmail(p: GuestReceiptParams) {
   `)
 
   const text = [
-    greeting,
+    greetingText,
     '',
     `Επισυνάπτεται η απόδειξη είσπραξης του Τέλους Ανθεκτικότητας στην Κλιματική Κρίση για τη διαμονή σας στο ${p.propertyName}.`,
     '',
@@ -113,7 +130,8 @@ export interface MonthlyReminderParams {
 }
 
 export function monthlyReminderEmail(p: MonthlyReminderParams) {
-  const greeting = p.hostName ? `${p.hostName},` : 'Καλησπέρα,'
+  const greetingText = p.hostName ? `${p.hostName},` : 'Καλησπέρα,'
+  const greetingHtml = p.hostName ? `${escapeEmailHtml(p.hostName)},` : 'Καλησπέρα,'
   const amount = formatCents(p.totalAmountCents)
   const periodText = grPeriod(p.period)
 
@@ -128,7 +146,7 @@ export function monthlyReminderEmail(p: MonthlyReminderParams) {
     : ''
 
   const html = shell(`
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${greetingHtml}</p>
     ${urgency}
     <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
       Για τον <strong>${periodText}</strong> εκδόθηκαν
@@ -148,7 +166,7 @@ export function monthlyReminderEmail(p: MonthlyReminderParams) {
   `)
 
   const text = [
-    greeting,
+    greetingText,
     '',
     p.isSecondReminder ? `ΑΠΟΜΕΝΟΥΝ ${p.daysLeft} ΗΜΕΡΕΣ. Προθεσμία: ${grDate(p.deadline)}` : '',
     '',

@@ -11,11 +11,15 @@
  */
 
 import { resolve, join } from 'node:path'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import type { TDocumentDefinitions, Content } from 'pdfmake/interfaces'
 import { formatCents, type NightBreakdown } from '../takk/calculator'
 import { formatFullNumber } from '../takk/numbering'
+
+declare const useStorage: (base?: string) => {
+  getItemRaw: (key: string) => Promise<unknown>
+}
 
 /**
  * ΒΡΕΘΗΚΕ ΜΕ ΠΡΑΓΜΑΤΙΚΟ Inngest end-to-end test (όχι tsx script bypass):
@@ -50,10 +54,12 @@ async function ensureFontsOnDisk(): Promise<string> {
 
   fontDirReady = (async () => {
     const dir = await mkdtemp(join(tmpdir(), 'endaxi-fonts-'))
-    const storage = useStorage('assets:server')
+    const storage = typeof useStorage === 'function' ? useStorage('assets:server') : null
 
     for (const file of FONT_FILES) {
-      const bytes = await storage.getItemRaw(`fonts/${file}`)
+      const bytes = storage
+        ? await storage.getItemRaw(`fonts/${file}`)
+        : await readFile(resolve(process.cwd(), 'server/assets/fonts', file))
       if (!bytes) {
         throw new Error(
           `Λείπει γραμματοσειρά '${file}' από server/assets/fonts/ — δεν μπορεί να παραχθεί PDF.`,
@@ -82,6 +88,7 @@ export interface TakkReceiptData {
   // Εκδότης
   issuerName: string | null
   issuerAfm: string | null
+  issuerAddress?: string | null
 
   // Ακίνητο
   propertyAma: string
@@ -219,6 +226,9 @@ export function buildTakkReceiptDefinition(data: TakkReceiptData): TDocumentDefi
           { text: 'ΕΚΔΟΤΗΣ', style: 'label' },
           { text: data.issuerName ?? '—', style: 'value' },
           { text: data.issuerAfm ? `ΑΦΜ: ${data.issuerAfm}` : 'ΑΦΜ: —', style: 'small' },
+          data.issuerAddress
+            ? { text: data.issuerAddress, style: 'small' }
+            : { text: '' },
         ],
       },
       {

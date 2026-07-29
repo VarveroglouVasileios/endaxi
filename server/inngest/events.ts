@@ -25,14 +25,17 @@ export const stayCreated = eventType('stay/created', {
   schema: z.object({ stayId: uuid }),
 })
 
-/** Η διαμονή εξαφανίστηκε από το feed → ακύρωση */
+/** Επιβεβαιώθηκε ακύρωση διαμονής μετά από ασφαλή reconciliation/review */
 export const stayCancelled = eventType('stay/cancelled', {
   schema: z.object({ stayId: uuid }),
 })
 
 /** Ζητήθηκε έκδοση ΤΑΚΚ για διαμονή */
 export const takkIssueRequested = eventType('takk/issue.requested', {
-  schema: z.object({ stayId: uuid }),
+  schema: z.object({
+    stayId: uuid,
+    asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }),
 })
 
 /** Εκδόθηκε παραστατικό ΤΑΚΚ */

@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { properties, icalSources } from '../../database/schema'
 
@@ -17,9 +17,24 @@ export default defineEventHandler(async (event) => {
   // Οι πηγές ημερολογίου ανά ακίνητο — ο χρήστης θέλει να δει αν συγχρονίζεται
   const sources = rows.length
     ? await db
-        .select()
+        .select({
+          id: icalSources.id,
+          propertyId: icalSources.propertyId,
+          source: icalSources.source,
+          label: icalSources.label,
+          isActive: icalSources.isActive,
+          lastSyncedAt: icalSources.lastSyncedAt,
+          lastSyncStatus: icalSources.lastSyncStatus,
+          consecutiveFailures: icalSources.consecutiveFailures,
+          createdAt: icalSources.createdAt,
+        })
         .from(icalSources)
-        .where(eq(icalSources.isActive, true))
+        .where(
+          and(
+            eq(icalSources.isActive, true),
+            inArray(icalSources.propertyId, rows.map(property => property.id)),
+          ),
+        )
     : []
 
   return rows.map((p) => ({

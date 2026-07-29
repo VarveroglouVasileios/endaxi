@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { users, auditLog } from '../../database/schema'
 import { checkGate } from '../../utils/gate'
+import { getTrustedClientIp } from '../../utils/request-ip'
 
 const bodySchema = z.object({
   propertyCount: z.number().int().min(0).max(999),
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
   )
 
   const gate = checkGate({ propertyCount, isLegalEntity })
-  const ip = getRequestIP(event, { xForwardedFor: true })
+  const ip = getTrustedClientIp(event)
 
   await db
     .update(users)

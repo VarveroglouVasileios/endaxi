@@ -35,6 +35,9 @@ const CATEGORY_LABEL = {
 } as const
 
 function syncStatus(s: IcalSource) {
+  if (s.lastSyncStatus === 'review_required') {
+    return { label: 'Χρειάζεται έλεγχος αλλαγών', ok: false }
+  }
   if (s.consecutiveFailures > 0) return { label: 'Πρόβλημα συγχρονισμού', ok: false }
   if (!s.lastSyncedAt) return { label: 'Αναμονή πρώτου συγχρονισμού', ok: true }
   return { label: `Συγχρονίστηκε ${grDate(s.lastSyncedAt.slice(0, 10))}`, ok: true }
@@ -105,7 +108,7 @@ async function disconnect(id: string) {
       <li v-for="p in properties" :key="p.id" class="card">
         <!-- ── Προβολή ── -->
         <template v-if="editingId !== p.id">
-          <div class="flex items-start justify-between gap-4">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div class="min-w-0">
               <h2 class="font-semibold">{{ p.name }}</h2>
               <p class="mt-0.5 text-xs tnum" style="color: var(--color-ink-muted)">
@@ -120,14 +123,14 @@ async function disconnect(id: string) {
                 </span>
               </p>
             </div>
-            <div class="flex shrink-0 flex-col items-end gap-2">
+            <div class="flex flex-col items-start gap-2 sm:shrink-0 sm:items-end">
               <span
-                class="badge"
+                class="badge max-w-full whitespace-normal text-left sm:text-right"
                 style="background: var(--color-paper); color: var(--color-ink-soft)"
               >
                 {{ CATEGORY_LABEL[p.category] }}
               </span>
-              <button class="btn-ghost !px-2 !py-1 text-xs" @click="startEdit(p)">
+              <button class="btn-ghost !px-3 text-xs" @click="startEdit(p)">
                 Επεξεργασία
               </button>
             </div>
@@ -137,38 +140,59 @@ async function disconnect(id: string) {
         <!-- ── Επεξεργασία ── -->
         <form v-else class="space-y-4" @submit.prevent="save(p.id)">
           <div>
-            <label class="label">Ονομασία</label>
-            <input v-model="form.name" class="input" required />
+            <label :for="`property-name-${p.id}`" class="label">Ονομασία</label>
+            <input :id="`property-name-${p.id}`" v-model="form.name" class="input" required />
           </div>
 
           <div>
-            <label class="label">Διεύθυνση</label>
+            <label :for="`property-address-${p.id}`" class="label">Διεύθυνση</label>
             <input
+              :id="`property-address-${p.id}`"
               v-model="form.addressLine"
               class="input"
               required
+              autocomplete="street-address"
               placeholder="Δράκου 12"
             />
             <div class="mt-2 grid grid-cols-2 gap-3">
-              <input v-model="form.city" class="input" required placeholder="Πόλη" />
-              <input
-                v-model="form.postalCode"
-                class="input tnum"
-                required
-                placeholder="Τ.Κ."
-              />
+              <div>
+                <label :for="`property-city-${p.id}`" class="label">Πόλη</label>
+                <input
+                  :id="`property-city-${p.id}`"
+                  v-model="form.city"
+                  class="input"
+                  required
+                  autocomplete="address-level2"
+                />
+              </div>
+              <div>
+                <label :for="`property-postal-code-${p.id}`" class="label">Τ.Κ.</label>
+                <input
+                  :id="`property-postal-code-${p.id}`"
+                  v-model="form.postalCode"
+                  class="input tnum"
+                  required
+                  inputmode="numeric"
+                  autocomplete="postal-code"
+                />
+              </div>
             </div>
             <p class="hint">Υποχρεωτική στο ειδικό στοιχείο (Α.1202/2024).</p>
           </div>
 
           <div>
-            <label class="label">Τετραγωνικά</label>
-            <input v-model.number="form.areaSqm" type="number" class="input tnum" />
+            <label :for="`property-area-${p.id}`" class="label">Τετραγωνικά</label>
+            <input
+              :id="`property-area-${p.id}`"
+              v-model.number="form.areaSqm"
+              type="number"
+              class="input tnum"
+            />
           </div>
 
           <div>
-            <label class="label">Τύπος</label>
-            <select v-model="form.category" class="input">
+            <label :for="`property-category-${p.id}`" class="label">Τύπος</label>
+            <select :id="`property-category-${p.id}`" v-model="form.category" class="input">
               <option value="str_standard">Διαμέρισμα / μικρό κατάλυμα — 8€/2€</option>
               <option value="str_villa">Μονοκατοικία &gt;80τμ / βίλα — 15€/4€</option>
             </select>
@@ -213,17 +237,25 @@ async function disconnect(id: string) {
             <li
               v-for="s in p.icalSources"
               :key="s.id"
-              class="flex items-center gap-3 text-sm"
+              class="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-3"
             >
-              <span
-                class="h-2 w-2 shrink-0 rounded-full"
-                :style="`background: ${syncStatus(s).ok ? 'var(--color-ok)' : 'var(--color-danger)'}`"
-              />
-              <span class="capitalize">{{ s.label ?? s.source }}</span>
-              <span class="flex-1 text-xs" style="color: var(--color-ink-muted)">
-                {{ syncStatus(s).label }}
-              </span>
-              <button class="btn-ghost !px-2 !py-1 text-xs" @click="disconnect(s.id)">
+              <div class="flex min-w-0 items-center gap-3">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :style="`background: ${syncStatus(s).ok ? 'var(--color-ok)' : 'var(--color-danger)'}`"
+                />
+                <span class="min-w-0 capitalize">{{ s.label ?? s.source }}</span>
+                <span
+                  class="min-w-0 flex-1 text-xs"
+                  style="color: var(--color-ink-muted)"
+                >
+                  {{ syncStatus(s).label }}
+                </span>
+              </div>
+              <button
+                class="btn-ghost self-start !px-3 text-xs sm:self-auto"
+                @click="disconnect(s.id)"
+              >
                 Αποσύνδεση
               </button>
             </li>
@@ -232,7 +264,7 @@ async function disconnect(id: string) {
           <NuxtLink
             v-if="p.icalSources.length"
             :to="`/onboarding/imerologio?property=${p.id}`"
-            class="btn-ghost mt-2 !px-2 !py-1 text-xs"
+            class="btn-ghost mt-2 !px-3 text-xs"
           >
             + Προσθήκη ημερολογίου
           </NuxtLink>

@@ -7,7 +7,7 @@
  * Inngest v4: triggers στο πρώτο όρισμα, event types από ../events.
  */
 
-import { eq, and, lte, isNull, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { NonRetriableError, cron } from 'inngest'
 import { inngest } from '../client'
 import { takkIssueRequested, takkIssued, stayCancelled } from '../events'
@@ -19,9 +19,17 @@ import {
   NumberingError,
 } from '../../utils/takk/numbering'
 
+function athensDate(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
 /**
- * Cron ημερήσιο: εκδίδει ΤΑΚΚ για όσες διαμονές αναχωρούν σήμερα
- * και δεν έχουν ακόμα παραστατικό.
+ * Cron ημερήσιο: εκδίδει κάθε ολοκληρωμένο μηνιαίο τμήμα που λείπει.
  */
 export const issueDueTakkDocuments = inngest.createFunction(
   {
@@ -30,7 +38,7 @@ export const issueDueTakkDocuments = inngest.createFunction(
   },
   async ({ step }) => {
     const db = useDatabase()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = athensDate()
 
     const due = await step.run('find-due-stays', async () =>
       db
@@ -38,21 +46,30 @@ export const issueDueTakkDocuments = inngest.createFunction(
         .from(stays)
         .innerJoin(properties, eq(stays.propertyId, properties.id))
         .innerJoin(users, eq(properties.userId, users.id))
-        .leftJoin(
-          takkDocuments,
-          and(
-            eq(takkDocuments.stayId, stays.id),
-            eq(takkDocuments.documentType, 'takk_receipt'),
-          ),
-        )
         .where(
           and(
             eq(stays.status, 'confirmed'),
-            lte(stays.checkOut, today),
             sql`${stays.nights} > 0`,
-            isNull(takkDocuments.id),
             // Μόνο ιδιώτες ≤2 ακίνητα — οι επιτηδευματίες θέλουν myDATA
             eq(users.taxRegime, 'individual_upto_2'),
+            sql`EXISTS (
+              SELECT 1
+              FROM generate_series(
+                date_trunc('month', ${stays.checkIn}::date),
+                date_trunc(
+                  'month',
+                  LEAST(${stays.checkOut}::date - 1, ${today}::date - 1)
+                ),
+                interval '1 month'
+              ) AS eligible(month_start)
+              WHERE NOT EXISTS (
+                SELECT 1
+                FROM takk_documents AS issued
+                WHERE issued.stay_id = ${stays.id}
+                  AND issued.document_type = 'takk_receipt'
+                  AND issued.remittance_period = to_char(eligible.month_start, 'YYYY-MM')
+              )
+            )`,
           ),
         )
         .limit(500),
@@ -62,7 +79,7 @@ export const issueDueTakkDocuments = inngest.createFunction(
 
     await step.sendEvent(
       'dispatch-issuance',
-      due.map((s) => takkIssueRequested.create({ stayId: s.id })),
+      due.map((s) => takkIssueRequested.create({ stayId: s.id, asOfDate: today })),
     )
 
     return { dispatched: due.length }
@@ -84,7 +101,10 @@ export const issueTakkForStay = inngest.createFunction(
     // Διαμονή που διασχίζει μήνες παράγει ΠΟΛΛΑ παραστατικά
     const docs = await step.run('issue-documents', async () => {
       try {
-        return await issueTakkDocuments(db, { stayId: event.data.stayId })
+        return await issueTakkDocuments(db, {
+          stayId: event.data.stayId,
+          asOfDate: event.data.asOfDate,
+        })
       } catch (e) {
         // Λάθη λογικής δεν επαναλαμβάνονται
         if (e instanceof NumberingError) throw new NonRetriableError(e.message)
@@ -112,12 +132,13 @@ export const handleStayCancellation = inngest.createFunction(
     id: 'handle-stay-cancellation',
     triggers: [stayCancelled],
     retries: 3,
+    concurrency: { key: 'event.data.stayId', limit: 1 },
   },
   async ({ event, step }) => {
     const db = useDatabase()
 
-    const existing = await step.run('find-issued-document', async () => {
-      const [row] = await db
+    const existing = await step.run('find-issued-documents', async () =>
+      db
         .select()
         .from(takkDocuments)
         .where(
@@ -126,25 +147,45 @@ export const handleStayCancellation = inngest.createFunction(
             eq(takkDocuments.documentType, 'takk_receipt'),
           ),
         )
-        .limit(1)
-      return row ?? null
-    })
+    )
 
-    if (!existing) return { action: 'none', reason: 'Δεν είχε εκδοθεί παραστατικό' }
+    if (existing.length === 0) {
+      return { action: 'none', reason: 'Δεν είχε εκδοθεί παραστατικό' }
+    }
 
-    const cancellation = await step.run('issue-cancellation', async () => {
-      try {
-        return await cancelTakkDocument(
-          db,
-          existing.id,
-          'Ακύρωση κράτησης — η διαμονή αφαιρέθηκε από το ημερολόγιο της πλατφόρμας',
-        )
-      } catch (e) {
-        if (e instanceof NumberingError) throw new NonRetriableError(e.message)
-        throw e
+    const cancellations = await step.run('issue-cancellations', async () => {
+      const created = []
+      for (const document of existing) {
+        const [alreadyCancelled] = await db
+          .select({ id: takkDocuments.id })
+          .from(takkDocuments)
+          .where(eq(takkDocuments.cancelsDocumentId, document.id))
+          .limit(1)
+        if (alreadyCancelled) continue
+
+        try {
+          created.push(
+            await cancelTakkDocument(
+              db,
+              document.id,
+              'Ακύρωση κράτησης μετά από επιβεβαιωμένο έλεγχο',
+            ),
+          )
+        } catch (e) {
+          if (e instanceof NumberingError) throw new NonRetriableError(e.message)
+          throw e
+        }
       }
+      return created
     })
 
-    return { action: 'cancelled', document: cancellation }
+    if (cancellations.length > 0) {
+      await step.sendEvent(
+        'emit-cancellations',
+        cancellations.map(document => takkIssued.create({ documentId: document.id })),
+      )
+    }
+
+    return { action: 'cancelled', documents: cancellations }
   },
 )

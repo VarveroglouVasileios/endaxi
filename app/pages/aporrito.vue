@@ -1,18 +1,24 @@
 <script setup lang="ts">
-useSeoMeta({
+useCanonicalSeo({
   title: 'Πολιτική Απορρήτου — Εντάξει',
   description: 'Πώς επεξεργαζόμαστε τα δεδομένα σου.',
+  robots: 'noindex, follow',
 })
 
-const updated = '26 Ιουλίου 2026'
+const updated = '29 Ιουλίου 2026'
 
 const subprocessors = [
   { name: 'Neon', purpose: 'Βάση δεδομένων', region: 'ΕΕ (Φρανκφούρτη)' },
-  { name: 'Vercel', purpose: 'Φιλοξενία εφαρμογής', region: 'ΕΕ' },
+  {
+    name: 'Microsoft Azure',
+    purpose: 'Φιλοξενία εφαρμογής (App Service)',
+    region: 'ΕΕ (η τελική περιοχή θα επιβεβαιωθεί πριν την παραγωγή)',
+  },
   { name: 'Inngest', purpose: 'Προγραμματισμένες εργασίες', region: 'ΕΕ/ΗΠΑ (SCCs)' },
   { name: 'Cloudflare R2', purpose: 'Αποθήκευση PDF', region: 'ΕΕ' },
+  { name: 'Upstash', purpose: 'Προστασία από κατάχρηση και υπερβολικά αιτήματα', region: 'ΕΕ' },
   { name: 'Resend', purpose: 'Αποστολή email', region: 'ΕΕ/ΗΠΑ (SCCs)' },
-  { name: 'Anthropic', purpose: 'Αναγνώριση εγγράφων (OCR)', region: 'ΗΠΑ (SCCs, μηδενική διατήρηση)' },
+  { name: 'Groq', purpose: 'AI βοήθεια προϊόντος', region: 'Όπως ορίζεται στο DPA (SCCs όπου απαιτούνται)' },
 ]
 </script>
 
@@ -62,6 +68,12 @@ const subprocessors = [
             επισκέπτη, από τους iCal συνδέσμους που συνδέεις
           </li>
           <li><strong>Τεχνικά:</strong> IP και user-agent, για το αρχείο ελέγχου</li>
+          <li>
+            <strong>AI βοηθός:</strong> το κείμενο που επιλέγεις να στείλεις και
+            ελάχιστα τεχνικά μεταδεδομένα, όπως χρόνος, πλήθος μηνυμάτων και
+            χαρακτήρων και αναγνωριστικό αιτήματος. Δεν συνδέουμε τη συνομιλία
+            με δεδομένα λογαριασμού.
+          </li>
         </ul>
         <p class="mt-4 notice-info">
           <strong>Τι ΔΕΝ συλλέγουμε:</strong> κωδικούς πρόσβασης σε πλατφόρμες,
@@ -76,6 +88,10 @@ const subprocessors = [
           <li><strong>Εκτέλεση σύμβασης</strong> (άρ. 6§1β): παροχή της υπηρεσίας</li>
           <li><strong>Νομική υποχρέωση</strong> (άρ. 6§1γ): τήρηση παραστατικών</li>
           <li><strong>Έννομο συμφέρον</strong> (άρ. 6§1στ): ασφάλεια, αποτροπή κατάχρησης</li>
+          <li>
+            <strong>Εκτέλεση σύμβασης</strong> (άρ. 6§1β): απάντηση σε ερώτημα
+            υποστήριξης που στέλνεις προαιρετικά στον AI βοηθό
+          </li>
         </ul>
       </section>
 
@@ -92,14 +108,27 @@ const subprocessors = [
           <li><strong>Λογαριασμός:</strong> έως τη διαγραφή του</li>
           <li><strong>Αρχείο ελέγχου:</strong> 24 μήνες</li>
           <li><strong>Δεδομένα επισκεπτών:</strong> όσο απαιτείται για τα παραστατικά</li>
+          <li>
+            <strong>Συνομιλία AI:</strong> δεν αποθηκεύεται στη βάση δεδομένων
+            ή στον browser από το Endaxi και διαγράφεται από την οθόνη με
+            ανανέωση της σελίδας. Ο πάροχος AI την επεξεργάζεται σύμφωνα με το
+            DPA και τις ενεργές ρυθμίσεις Data Controls του λογαριασμού μας.
+          </li>
+          <li>
+            <strong>Τεχνικά logs AI:</strong> χωρίς περιεχόμενο μηνυμάτων ή IP,
+            για έως 30 ημέρες, για ασφάλεια και διάγνωση προβλημάτων
+          </li>
         </ul>
       </section>
 
       <section>
         <h2 class="text-lg font-bold">5. Ποιοι άλλοι εμπλέκονται</h2>
         <p class="mt-3">Υπο-εκτελούντες επεξεργασία:</p>
-        <div class="mt-4 overflow-hidden rounded-lg border" style="border-color: var(--color-line)">
-          <table class="w-full text-xs">
+        <div
+          class="mt-4 overflow-x-auto rounded-lg border"
+          style="border-color: var(--color-line)"
+        >
+          <table class="w-full min-w-[28rem] text-xs">
             <thead style="background: var(--color-paper)">
               <tr>
                 <th class="p-2.5 text-left font-semibold">Πάροχος</th>
@@ -123,8 +152,10 @@ const subprocessors = [
         </div>
         <p class="hint mt-3">
           Για διαβιβάσεις εκτός ΕΟΧ εφαρμόζονται Τυποποιημένες Συμβατικές Ρήτρες.
-          Στον πάροχο AI εφαρμόζεται ρύθμιση μηδενικής διατήρησης και απαγόρευση
-          χρήσης για εκπαίδευση μοντέλων.
+          Οι πραγματικές περιοχές επεξεργασίας, οι υπο-εκτελούντες και οι
+          ρυθμίσεις διατήρησης κάθε παρόχου πρέπει να επιβεβαιώνονται πριν την
+          παραγωγική λειτουργία. Δεν βασιζόμαστε σε συγκατάθεση cookies για την
+          επεξεργασία του μηνύματος από τον AI βοηθό.
         </p>
       </section>
 
@@ -146,7 +177,17 @@ const subprocessors = [
       </section>
 
       <section>
-        <h2 class="text-lg font-bold">7. Τα δικαιώματά σου</h2>
+        <h2 class="text-lg font-bold">7. Αυτοματοποιημένη λήψη αποφάσεων</h2>
+        <p class="mt-3">
+          Ο AI βοηθός δεν λαμβάνει αποφάσεις για εσένα, δεν αξιολογεί το
+          φορολογικό σου καθεστώς και δεν παράγει έννομα ή παρόμοια σημαντικά
+          αποτελέσματα. Παρέχει μόνο γενικές πληροφορίες για τη χρήση του
+          προϊόντος, τις οποίες πρέπει να επαληθεύεις.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold">8. Τα δικαιώματά σου</h2>
         <p class="mt-3">
           Πρόσβαση, διόρθωση, διαγραφή, περιορισμός, φορητότητα, εναντίωση.
           Αίτημα στο
@@ -161,16 +202,19 @@ const subprocessors = [
       </section>
 
       <section>
-        <h2 class="text-lg font-bold">8. Cookies</h2>
+        <h2 class="text-lg font-bold">9. Cookies</h2>
         <p class="mt-3">
-          Μόνο <strong>απολύτως απαραίτητα</strong> cookies, για τη διατήρηση
-          της σύνδεσής σου. Δεν χρησιμοποιούμε cookies διαφήμισης ή
-          παρακολούθησης τρίτων.
+          Χρησιμοποιούμε <strong>απολύτως απαραίτητα</strong> cookies για τη
+          διατήρηση και την ασφάλεια της σύνδεσής σου. Οποιαδήποτε προαιρετική
+          στατιστική μέτρηση ενεργοποιείται μόνο μετά από συγκατάθεση. Δεν
+          χρησιμοποιούμε cookies διαφήμισης ή παρακολούθησης μεταξύ ιστοτόπων.
+          Περισσότερα στην
+          <NuxtLink to="/cookies" class="underline">Πολιτική Cookies</NuxtLink>.
         </p>
       </section>
 
       <section>
-        <h2 class="text-lg font-bold">9. Επικοινωνία</h2>
+        <h2 class="text-lg font-bold">10. Επικοινωνία</h2>
         <p class="mt-3">
           <span class="notice-warn inline-block">
             Συμπλήρωσε: επωνυμία, ΑΦΜ, έδρα, email υπευθύνου επεξεργασίας.

@@ -15,7 +15,6 @@ import { inngest } from '../client'
 import { takkIssued } from '../events'
 import { useDatabase } from '../../database/client'
 import { takkDocuments, properties, stays } from '../../database/schema'
-import { calculateTakk } from '../../utils/takk/calculator'
 import { formatFullNumber } from '../../utils/takk/numbering'
 import { renderTakkReceiptPdf } from '../../utils/pdf/takk-receipt'
 import {
@@ -47,10 +46,32 @@ export const deliverTakkDocument = inngest.createFunction(
         .limit(1)
 
       if (!row) throw new NonRetriableError(`Δεν βρέθηκε παραστατικό ${documentId}`)
-      return row
+
+      let cancelsFullNumber: string | undefined
+      if (row.doc.cancelsDocumentId) {
+        const [original] = await db
+          .select({
+            series: takkDocuments.series,
+            number: takkDocuments.number,
+            year: takkDocuments.year,
+          })
+          .from(takkDocuments)
+          .where(eq(takkDocuments.id, row.doc.cancelsDocumentId))
+          .limit(1)
+        if (!original) {
+          throw new NonRetriableError('Το αντιλογιστικό δεν έχει έγκυρο αρχικό παραστατικό')
+        }
+        cancelsFullNumber = formatFullNumber(
+          original.series,
+          original.number,
+          original.year,
+        )
+      }
+
+      return { ...row, cancelsFullNumber }
     })
 
-    const { doc, property } = ctx
+    const { doc, property, cancelsFullNumber } = ctx
 
     // ── 2. Παραγωγή PDF (αν δεν υπάρχει ήδη) ──
     if (doc.pdfStorageKey) {
@@ -59,11 +80,29 @@ export const deliverTakkDocument = inngest.createFunction(
     }
 
     const pdfBase64 = await step.run('render-pdf', async () => {
-      const calc = calculateTakk({
-        checkIn: doc.checkIn,
-        checkOut: doc.checkOut,
-        category: property.category,
-      })
+      if (
+        !doc.rateBreakdown
+        || !doc.issuerAddressLine
+        || !doc.issuerAddressCity
+        || !doc.issuerAddressPostalCode
+        || !doc.propertyAddressLine
+        || !doc.propertyCity
+        || !doc.propertyPostalCode
+      ) {
+        throw new NonRetriableError(
+          'Το παραστατικό δεν έχει πλήρες immutable snapshot για ασφαλή παραγωγή PDF',
+        )
+      }
+
+      const sign = doc.documentType === 'takk_cancellation' ? -1 : 1
+      const breakdown = doc.rateBreakdown.map(night => ({
+        ...night,
+        rateCents: Math.abs(night.rateCents) * sign,
+      }))
+      const distinctRates = new Set(breakdown.map(night => night.rateCents))
+      const uniformRateCents = distinctRates.size === 1
+        ? breakdown[0]?.rateCents ?? null
+        : null
 
       const buf = await renderTakkReceiptPdf({
         series: doc.series,
@@ -72,21 +111,20 @@ export const deliverTakkDocument = inngest.createFunction(
         // Το `step.run` σειριοποιεί σε JSON — το Date γυρνά ως string
         issuedAt: new Date(doc.issuedAt),
         isCancellation: doc.documentType === 'takk_cancellation',
-        cancelsFullNumber: undefined,
+        cancelsFullNumber,
         cancellationReason: doc.cancellationReason ?? undefined,
         issuerName: doc.issuerName,
         issuerAfm: doc.issuerAfm,
+        issuerAddress: `${doc.issuerAddressLine}, ${doc.issuerAddressCity} ${doc.issuerAddressPostalCode}`,
         propertyAma: doc.propertyAma,
         propertyName: doc.propertyName,
-        propertyAddress: property.addressLine
-          ? `${property.addressLine}, ${property.city ?? ''} ${property.postalCode ?? ''}`.trim()
-          : null,
+        propertyAddress: `${doc.propertyAddressLine}, ${doc.propertyCity} ${doc.propertyPostalCode}`,
         checkIn: doc.checkIn,
         checkOut: doc.checkOut,
         nights: doc.nights,
         guestName: doc.guestName,
-        breakdown: calc.breakdown,
-        uniformRateCents: calc.uniformRateCents,
+        breakdown,
+        uniformRateCents,
         totalAmountCents: doc.totalAmountCents,
         remittancePeriod: doc.remittancePeriod,
       })

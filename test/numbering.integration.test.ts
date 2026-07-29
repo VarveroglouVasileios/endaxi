@@ -27,6 +27,7 @@ import {
 } from './helpers/db'
 import {
   issueTakkDocuments,
+  findReceiptsForStay,
   cancelTakkDocument,
   verifySeriesIntegrity,
   formatFullNumber,
@@ -222,6 +223,36 @@ describe('Υπολογισμός & snapshot', () => {
     expect(total).toBe(1800)
   })
 
+  it('εκδίδει κάθε μηνιαίο τμήμα μόλις ολοκληρωθεί, χωρίς να περιμένει το τελικό checkout', async () => {
+    const user = await seedUser(db)
+    const property = await seedProperty(db, user.id)
+    const stay = await seedStay(db, property.id, {
+      checkIn: '2026-10-30',
+      checkOut: '2026-11-02',
+      nights: 3,
+    })
+
+    const october = await issueTakkDocuments(db, {
+      stayId: stay.id,
+      asOfDate: '2026-11-01',
+    })
+    expect(october).toHaveLength(1)
+    expect(october[0]!.remittancePeriod).toBe('2026-10')
+
+    const november = await issueTakkDocuments(db, {
+      stayId: stay.id,
+      asOfDate: '2026-11-02',
+    })
+    expect(november).toHaveLength(1)
+    expect(november[0]!.remittancePeriod).toBe('2026-11')
+
+    const all = await findReceiptsForStay(db, stay.id)
+    expect(all.map(document => document.remittancePeriod)).toEqual([
+      '2026-10',
+      '2026-11',
+    ])
+  })
+
   it('τα τμήματα κρατούν τις ΔΙΚΕΣ ΤΟΥΣ ημερομηνίες, όχι της διαμονής', async () => {
     const user = await seedUser(db)
     const property = await seedProperty(db, user.id)
@@ -287,15 +318,22 @@ describe('Υπολογισμός & snapshot', () => {
     const property = await seedProperty(db, user.id, {
       ama: 'AMA-ORIGINAL',
       name: 'Αρχικό όνομα',
+      addressLine: 'Αρχική 1',
+      category: 'str_standard',
     })
     const stay = await seedStay(db, property.id)
 
     const doc = (await issueTakkDocuments(db, { stayId: stay.id }))[0]!
 
-    // Μετονομασία ακινήτου ΜΕΤΑ την έκδοση
+    // Αλλαγή νομικών/υπολογιστικών στοιχείων ΜΕΤΑ την έκδοση
     await db
       .update(properties)
-      .set({ name: 'Νέο όνομα', ama: 'AMA-CHANGED' })
+      .set({
+        name: 'Νέο όνομα',
+        ama: 'AMA-CHANGED',
+        addressLine: 'Νέα 99',
+        category: 'str_villa',
+      })
       .where(eq(properties.id, property.id))
 
     const [stored] = await db
@@ -305,6 +343,9 @@ describe('Υπολογισμός & snapshot', () => {
 
     expect(stored!.propertyName).toBe('Αρχικό όνομα')
     expect(stored!.propertyAma).toBe('AMA-ORIGINAL')
+    expect(stored!.propertyAddressLine).toBe('Αρχική 1')
+    expect(stored!.propertyCategory).toBe('str_standard')
+    expect(stored!.rateBreakdown).toHaveLength(stored!.nights)
   })
 })
 
@@ -344,6 +385,26 @@ describe('Ακύρωση — αντιλογιστικό, ποτέ διαγραφ
     await expect(cancelTakkDocument(db, original.id, 'δεύτερη')).rejects.toThrow(
       /ήδη ακυρωθεί/,
     )
+  })
+
+  it('η βάση επιτρέπει μόνο ένα αντιλογιστικό υπό ταυτόχρονα αιτήματα', async () => {
+    const user = await seedUser(db)
+    const property = await seedProperty(db, user.id)
+    const stay = await seedStay(db, property.id)
+    const original = (await issueTakkDocuments(db, { stayId: stay.id }))[0]!
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 20 }, () =>
+        cancelTakkDocument(db, original.id, 'Ταυτόχρονη ακύρωση'),
+      ),
+    )
+    expect(attempts.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+
+    const cancellations = await db
+      .select()
+      .from(takkDocuments)
+      .where(eq(takkDocuments.cancelsDocumentId, original.id))
+    expect(cancellations).toHaveLength(1)
   })
 
   it('δεν ακυρώνει αντιλογιστικό', async () => {
@@ -393,6 +454,17 @@ describe('Στοιχεία εκδότη — χωρίς αυτά το παρασ�
     await expect(issueTakkDocuments(db, { stayId: stay.id })).rejects.toThrow(
       /ονοματεπώνυμο/,
     )
+  })
+
+  it('ΑΡΝΕΙΤΑΙ έκδοση χωρίς νόμιμη διεύθυνση εκδότη', async () => {
+    const user = await seedUser(db, { legalAddressLine: null })
+    const property = await seedProperty(db, user.id)
+    const stay = await seedStay(db, property.id)
+
+    await expect(issueTakkDocuments(db, { stayId: stay.id })).rejects.toThrow(
+      /νόμιμη διεύθυνση/,
+    )
+    expect(await db.select().from(takkSeries)).toHaveLength(0)
   })
 
   it('αποθηκεύει το ΑΦΜ κανονικοποιημένο', async () => {

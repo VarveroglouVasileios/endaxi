@@ -6,12 +6,8 @@
 
 import { sql } from 'drizzle-orm'
 import { useDatabase } from '../database/client'
-import { isStorageConfigured } from '../utils/storage'
-import { isEmailConfigured } from '../utils/email/client'
 
 export default defineEventHandler(async (event) => {
-  const started = Date.now()
-
   let db = false
   try {
     await useDatabase().execute(sql`select 1`)
@@ -25,11 +21,5 @@ export default defineEventHandler(async (event) => {
 
   return {
     status: healthy ? 'ok' : 'degraded',
-    checks: {
-      database: db,
-      storage: isStorageConfigured(),
-      email: isEmailConfigured(),
-    },
-    latencyMs: Date.now() - started,
   }
 })

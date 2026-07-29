@@ -7,6 +7,9 @@ interface Me {
   name: string | null
   afm: string | null
   phone: string | null
+  legalAddressLine: string | null
+  legalAddressCity: string | null
+  legalAddressPostalCode: string | null
   taxRegime: string
   declaredPropertyCount: number
   canIssue: boolean
@@ -18,6 +21,9 @@ const form = reactive({
   name: me.value?.name ?? '',
   afm: me.value?.afm ?? '',
   phone: me.value?.phone ?? '',
+  legalAddressLine: me.value?.legalAddressLine ?? '',
+  legalAddressCity: me.value?.legalAddressCity ?? '',
+  legalAddressPostalCode: me.value?.legalAddressPostalCode ?? '',
 })
 
 const saving = ref(false)
@@ -51,7 +57,7 @@ async function save() {
     <div v-if="me && !me.canIssue" class="notice-warn mt-6">
       <p class="font-semibold">Λείπουν στοιχεία εκδότη</p>
       <p class="mt-1.5">
-        Χωρίς ονοματεπώνυμο και έγκυρο ΑΦΜ <strong>δεν εκδίδονται
+        Χωρίς ονοματεπώνυμο, έγκυρο ΑΦΜ και νόμιμη διεύθυνση <strong>δεν εκδίδονται
         παραστατικά</strong> — το παραστατικό θα ήταν νομικά ελαττωματικό.
         Συμπλήρωσέ τα τώρα ώστε να μη χαθούν οι κρατήσεις σου.
       </p>
@@ -59,8 +65,8 @@ async function save() {
 
     <form class="card mt-8 space-y-5" @submit.prevent="save">
       <div>
-        <label class="label">Email</label>
-        <input :value="me?.email" class="input" disabled />
+        <label for="account-email" class="label">Email</label>
+        <input id="account-email" :value="me?.email" class="input" disabled />
         <p class="hint">Δεν αλλάζει.</p>
       </div>
 
@@ -97,6 +103,47 @@ async function save() {
         </label>
         <input id="phone" v-model="form.phone" class="input tnum" type="tel" />
       </div>
+
+      <fieldset class="space-y-3 border-t pt-5" style="border-color: var(--color-line)">
+        <legend class="font-semibold">Νόμιμη διεύθυνση εκδότη</legend>
+        <p class="hint">
+          Είναι ξεχωριστή από τη διεύθυνση του καταλύματος και αποθηκεύεται
+          στο παραστατικό όπως ισχύει τη στιγμή της έκδοσης.
+        </p>
+        <div>
+          <label for="legal-address-line" class="label">Διεύθυνση</label>
+          <input
+            id="legal-address-line"
+            v-model="form.legalAddressLine"
+            class="input"
+            required
+            autocomplete="street-address"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="legal-address-city" class="label">Πόλη</label>
+            <input
+              id="legal-address-city"
+              v-model="form.legalAddressCity"
+              class="input"
+              required
+              autocomplete="address-level2"
+            />
+          </div>
+          <div>
+            <label for="legal-address-postal-code" class="label">Τ.Κ.</label>
+            <input
+              id="legal-address-postal-code"
+              v-model="form.legalAddressPostalCode"
+              class="input tnum"
+              required
+              inputmode="numeric"
+              autocomplete="postal-code"
+            />
+          </div>
+        </div>
+      </fieldset>
 
       <div class="flex items-center gap-3">
         <button type="submit" class="btn-primary" :disabled="saving">

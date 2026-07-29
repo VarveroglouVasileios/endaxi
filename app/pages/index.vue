@@ -1,13 +1,15 @@
 <script setup lang="ts">
-useSeoMeta({
-  title: 'Εντάξει — Το ΤΑΚΚ σου εκδίδεται μόνο του',
-  description:
-    'Συνδέεις το ημερολόγιό σου μία φορά. Το Τέλος Ανθεκτικότητας εκδίδεται αυτόματα κάθε μήνα, με σωστή σειρά και αύξοντα αριθμό. Χωρίς μπλοκάκι, χωρίς Excel.',
-  ogTitle: 'Εντάξει — Είσαι εντάξει με την ΑΑΔΕ',
-  ogDescription:
-    'Compliance autopilot για βραχυχρόνια μίσθωση. Το ΤΑΚΚ σου, αυτόματα.',
-  ogLocale: 'el_GR',
+const seoTitle = 'Παραστατικά ΤΑΚΚ για βραχυχρόνια μίσθωση — Endaxi'
+const seoDescription
+  = 'Οργάνωσε διαμονές και παραστατικά ΤΑΚΚ με σύνδεση iCal, υπολογισμούς και υπενθυμίσεις. Εσύ ελέγχεις και υποβάλλεις ό,τι απαιτείται.'
+
+useCanonicalSeo({
+  title: seoTitle,
+  description: seoDescription,
 })
+
+const config = useRuntimeConfig()
+const siteUrl = config.public.appUrl.replace(/\/+$/u, '')
 
 const steps = [
   {
@@ -22,8 +24,8 @@ const steps = [
   },
   {
     n: '3',
-    title: 'Τέλος',
-    body: 'Από εδώ και πέρα δεν κάνεις τίποτα. Τα παραστατικά βγαίνουν μόνα τους.',
+    title: 'Έλεγξε και οργάνωσε',
+    body: 'Βλέπεις συγκεντρωμένα τα παραστατικά και τις υπενθυμίσεις κάθε μήνα.',
   },
 ]
 
@@ -45,6 +47,57 @@ const problems = [
     a: 'Υπενθύμιση την 1η και ξανά στις 25, με το ακριβές ποσό.',
   },
 ]
+
+useHead({
+  script: [
+    {
+      key: 'endaxi-structured-data',
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'Organization',
+            '@id': `${siteUrl}/#organization`,
+            name: 'Endaxi',
+            url: siteUrl,
+          },
+          {
+            '@type': 'WebSite',
+            '@id': `${siteUrl}/#website`,
+            url: siteUrl,
+            name: 'Endaxi',
+            inLanguage: 'el-GR',
+            publisher: { '@id': `${siteUrl}/#organization` },
+          },
+          {
+            '@type': 'SoftwareApplication',
+            '@id': `${siteUrl}/#software`,
+            name: 'Endaxi',
+            url: siteUrl,
+            description: seoDescription,
+            applicationCategory: 'BusinessApplication',
+            operatingSystem: 'Web',
+            inLanguage: 'el-GR',
+            publisher: { '@id': `${siteUrl}/#organization` },
+          },
+          {
+            '@type': 'FAQPage',
+            '@id': `${siteUrl}/#faq`,
+            mainEntity: problems.map(problem => ({
+              '@type': 'Question',
+              name: problem.q.replaceAll('«', '').replaceAll('»', ''),
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: problem.a,
+              },
+            })),
+          },
+        ],
+      }),
+    },
+  ],
+})
 </script>
 
 <template>
@@ -61,8 +114,8 @@ const problems = [
           style="color: var(--color-ink-soft)"
         >
           Συνδέεις το ημερολόγιό σου <strong>μία φορά</strong>. Από εκεί και πέρα
-          το Τέλος Ανθεκτικότητας εκδίδεται μόνο του κάθε μήνα — με σωστή σειρά,
-          σωστό μήνα, σωστό ποσό.
+          το Endaxi οργανώνει τους υπολογισμούς και τα παραστατικά κάθε μήνα —
+          εσύ τα ελέγχεις πριν τα χρησιμοποιήσεις.
         </p>
 
         <div class="mt-9 flex flex-wrap items-center gap-3">
@@ -70,7 +123,7 @@ const problems = [
             Ξεκίνα δωρεάν
           </NuxtLink>
           <span class="text-sm" style="color: var(--color-ink-muted)">
-            Χωρίς κάρτα · 5 παραστατικά τον μήνα δωρεάν
+            Χωρίς κάρτα για την εγγραφή
           </span>
         </div>
       </div>
@@ -79,16 +132,21 @@ const problems = [
     <!-- ── Το πρόβλημα ── -->
     <section class="border-y bg-white" style="border-color: var(--color-line)">
       <div class="mx-auto max-w-5xl px-5 py-16 sm:py-20">
-        <h2 class="text-2xl font-bold sm:text-3xl">
+        <h2 v-reveal class="text-2xl font-bold sm:text-3xl">
           Αυτά ρωτάει ο κόσμος κάθε μέρα
         </h2>
-        <p class="mt-3 max-w-xl" style="color: var(--color-ink-soft)">
+        <p v-reveal="70" class="mt-3 max-w-xl" style="color: var(--color-ink-soft)">
           Το ΤΑΚΚ απαιτεί ξεχωριστό παραστατικό ανά διαμονή, με σειρά και
-          αύξοντα αριθμό, και μηνιαία δήλωση. Καμία πλατφόρμα δεν το υποστηρίζει.
+          αύξοντα αριθμό, και μηνιαία δήλωση. Οι πλατφόρμες κρατήσεων δεν
+          οργανώνουν συνήθως αυτή τη διαδικασία για τον ιδιοκτήτη.
         </p>
 
         <dl class="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2">
-          <div v-for="p in problems" :key="p.q">
+          <div
+            v-for="(p, problemIndex) in problems"
+            :key="p.q"
+            v-reveal="problemIndex * 70"
+          >
             <dt class="font-medium" style="color: var(--color-ink)">
               {{ p.q }}
             </dt>
@@ -102,10 +160,15 @@ const problems = [
 
     <!-- ── Πώς δουλεύει ── -->
     <section class="mx-auto max-w-5xl px-5 py-16 sm:py-20">
-      <h2 class="text-2xl font-bold sm:text-3xl">Δύο λεπτά, μία φορά</h2>
+      <h2 v-reveal class="text-2xl font-bold sm:text-3xl">Δύο λεπτά, μία φορά</h2>
 
       <ol class="mt-10 grid gap-6 sm:grid-cols-3">
-        <li v-for="s in steps" :key="s.n" class="card">
+        <li
+          v-for="(s, stepIndex) in steps"
+          :key="s.n"
+          v-reveal="stepIndex * 90"
+          class="card"
+        >
           <div
             class="mb-4 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white"
             style="background: var(--color-brand)"
@@ -119,7 +182,7 @@ const problems = [
         </li>
       </ol>
 
-      <div class="notice-info mt-8">
+      <div v-reveal="120" class="notice-info mt-8">
         <strong>Δεν χρειάζεται να κατεβάσεις τίποτα.</strong> Χρησιμοποιούμε το
         iCal link που δίνουν ήδη οι πλατφόρμες — δεν χρειαζόμαστε τους κωδικούς σου
         ούτε τα ποσά των κρατήσεων. Το ΤΑΚΚ είναι σταθερό ποσό ανά διανυκτέρευση,
@@ -130,13 +193,14 @@ const problems = [
     <!-- ── Το όριο ── -->
     <section class="border-t bg-white" style="border-color: var(--color-line)">
       <div class="mx-auto max-w-5xl px-5 py-16">
-        <div class="max-w-2xl">
+        <div v-reveal class="max-w-2xl">
           <h2 class="text-xl font-bold">Για ποιους είναι — και για ποιους όχι</h2>
           <div class="mt-6 grid gap-4 sm:grid-cols-2">
             <div class="notice-ok">
               <strong>1–2 ακίνητα, φυσικό πρόσωπο</strong>
               <p class="mt-1.5">
-                Δεν τηρείς βιβλία. Το Εντάξει καλύπτει πλήρως τις υποχρεώσεις ΤΑΚΚ.
+                Το Endaxi σε βοηθά να οργανώνεις διαμονές και παραστατικά ΤΑΚΚ.
+                Εσύ ελέγχεις και υποβάλλεις ό,τι απαιτείται.
               </p>
             </div>
             <div class="notice-warn">
@@ -152,10 +216,10 @@ const problems = [
     </section>
 
     <!-- ── CTA ── -->
-    <section class="mx-auto max-w-5xl px-5 py-20 text-center">
+    <section v-reveal class="mx-auto max-w-5xl px-5 py-20 text-center">
       <h2 class="text-3xl font-bold">Είσαι εντάξει.</h2>
       <p class="mx-auto mt-3 max-w-md" style="color: var(--color-ink-soft)">
-        Δύο λεπτά τώρα, και δεν ξανασχολείσαι.
+        Ξεκινάς σε δύο λεπτά και έχεις οργανωμένη εικόνα κάθε μήνα.
       </p>
       <NuxtLink to="/register" class="btn-primary btn-lg mt-8">
         Ξεκίνα δωρεάν

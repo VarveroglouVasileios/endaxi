@@ -8,20 +8,26 @@
 import { useAuth } from '../utils/auth'
 
 /** Διαδρομές που δεν χρειάζονται session */
-const PUBLIC_PREFIXES = ['/api/auth', '/api/inngest', '/api/_', '/api/health']
+const PUBLIC_PREFIXES = [
+  '/api/auth',
+  '/api/help/chat',
+  '/api/inngest',
+  '/api/_',
+  '/api/health',
+]
 
 export default defineEventHandler(async (event) => {
   const path = getRequestURL(event).pathname
 
   if (!path.startsWith('/api/')) return
-  if (PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return
+  if (PUBLIC_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) return
 
   try {
     const session = await useAuth().api.getSession({
       headers: event.headers,
     })
 
-    if (session?.user) {
+    if (session?.user?.emailVerified) {
       event.context.userId = session.user.id
       event.context.user = session.user
       event.context.session = session.session

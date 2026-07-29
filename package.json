@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.17.0",
   "description": "Είσαι εντάξει. — Compliance autopilot για βραχυχρόνια μίσθωση",
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
+    "start": "node .output/server/index.mjs",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
@@ -23,14 +25,22 @@
     "verify": "pnpm typecheck && pnpm typecheck:test && pnpm test"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@ai-sdk/groq": "^4.0.15",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
+    "ai": "^7.0.40",
     "aws4fetch": "^1.0.20",
-    "better-auth": "^1.2.7",
+    "better-auth": "^1.6.25",
     "drizzle-orm": "^0.45.2",
+    "h3": "1.15.11",
     "inngest": "^4.13.0",
+    "ipaddr.js": "^2.4.0",
     "node-ical": "^0.27.1",
+    "nuxt-security": "^2.6.0",
     "pdfmake": "^0.3.11",
     "postgres": "^3.4.9",
+    "srvx": "^0.12.4",
+    "undici": "^8.9.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -42,7 +52,7 @@
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
+    "vitest": "^3.2.6",
     "vue-tsc": "^2.2.0"
   },
   "engines": {

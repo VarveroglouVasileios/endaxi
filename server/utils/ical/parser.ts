@@ -193,13 +193,17 @@ export async function parseIcalFeed(icsText: string): Promise<ParsedEvent[]> {
 /**
  * Διαφορά μεταξύ αυτών που έχουμε στη βάση και αυτών που ήρθαν τώρα.
  *
- * ΠΡΟΣΟΧΗ: μια κράτηση που εξαφανίζεται από το feed σημαίνει ΑΚΥΡΩΣΗ.
- * Αν έχει ήδη εκδοθεί ΤΑΚΚ, χρειάζεται αντιλογιστικό — δεν σβήνουμε.
+ * ΠΡΟΣΟΧΗ: μια κράτηση που εξαφανίζεται από ένα snapshot είναι μόνο
+ * υποψήφια ακύρωση. Το sync layer πρέπει να ζητήσει επιβεβαίωση και δεν
+ * επιτρέπεται να εκδώσει αντιλογιστικό από μία μόνο απουσία.
  */
 export interface SyncDiff {
   toCreate: ParsedEvent[]
   toUpdate: Array<{ existingId: string; event: ParsedEvent }>
-  toCancel: string[] // stay ids
+  /** Missing from this snapshot; requires confirmation before cancellation. */
+  toCancel: string[]
+  /** Reappeared after a previous cancellation; never restore automatically. */
+  toReview: Array<{ existingId: string; event: ParsedEvent }>
   unchanged: number
 }
 
@@ -218,6 +222,7 @@ export function diffStays(
 
   const toCreate: ParsedEvent[] = []
   const toUpdate: Array<{ existingId: string; event: ParsedEvent }> = []
+  const toReview: Array<{ existingId: string; event: ParsedEvent }> = []
   let unchanged = 0
 
   for (const event of incoming) {
@@ -227,6 +232,11 @@ export function diffStays(
     const match = byUid.get(event.uid)
     if (!match) {
       toCreate.push(event)
+      continue
+    }
+
+    if (match.status !== 'confirmed') {
+      toReview.push({ existingId: match.id, event })
       continue
     }
 
@@ -248,5 +258,5 @@ export function diffStays(
     )
     .map((e) => e.id)
 
-  return { toCreate, toUpdate, toCancel, unchanged }
+  return { toCreate, toUpdate, toCancel, toReview, unchanged }
 }

@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
 import { useDatabase } from '../../../database/client'
 import { stays, properties, takkDocuments, auditLog } from '../../../database/schema'
+import { getTrustedClientIp } from '../../../utils/request-ip'
 
 const bodySchema = z.object({
   isComplimentary: z.boolean(),
@@ -80,7 +81,7 @@ export default defineEventHandler(async (event) => {
       checkOut: row.stay.checkOut,
       note: body.note ?? null,
     },
-    ipAddress: getRequestIP(event, { xForwardedFor: true }),
+    ipAddress: getTrustedClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent'),
   })
 

@@ -8,6 +8,7 @@
 import { eq, and } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { icalSources, properties, auditLog } from '../../database/schema'
+import { getTrustedClientIp } from '../../utils/request-ip'
 
 export default defineEventHandler(async (event) => {
   const db = useDatabase()
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
     action: 'ical_source.deactivated',
     entityType: 'ical_source',
     entityId: id,
-    ipAddress: getRequestIP(event, { xForwardedFor: true }),
+    ipAddress: getTrustedClientIp(event),
   })
 
   return { ok: true }

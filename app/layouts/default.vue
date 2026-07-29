@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { authClient } from '~/lib/auth-client'
-
-const { data: session } = await authClient.useSession(useFetch)
-
-async function handleSignOut() {
-  await authClient.signOut()
-  await navigateTo('/')
-}
+const route = useRoute()
+const { openPreferences: openCookiePreferences } = useCookieConsent()
+const isAppArea = computed(
+  () => route.path === '/app'
+    || route.path.startsWith('/app/')
+    || route.path.startsWith('/onboarding'),
+)
 </script>
 
 <template>
@@ -27,43 +26,25 @@ async function handleSignOut() {
         μπάρα πλοήγησης — ποτέ ξανά ολόκληρη η σελίδα.
       -->
       <div class="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-5">
-        <NuxtLink to="/" class="eyebrow shrink-0">Εντάξει</NuxtLink>
+        <NuxtLink to="/" class="eyebrow shrink-0">Endaxi</NuxtLink>
 
-        <!--
-          ΒΡΕΘΗΚΕ ΜΕ ΠΡΑΓΜΑΤΙΚΟ BROWSER TEST: για ήδη συνδεδεμένο χρήστη, το
-          SSR render έβλεπε session (άρα «Παραστατικά» κλπ) αλλά η πρώτη
-          στιγμή του client hydration έβλεπε ΑΚΟΜΑ null session («Σύνδεση»,
-          «Ξεκίνα δωρεάν») — το `authClient.useSession(useFetch)` λύνεται
-          ασύγχρονα διαφορετικά stateful στο server vs client payload replay.
-          Vue το ανίχνευε ως hydration text/attribute/children mismatch σε
-          ΚΑΘΕ NuxtLink του nav και πετούσε όλο το SSR HTML για να κάνει
-          πλήρες client re-render — ορατό flicker + άχρηστο κόστος.
-
-          Λύση: το session-εξαρτώμενο nav renderάρεται ΜΟΝΟ στον client
-          (`<ClientOnly>`), με ένα ουδέτερο fallback ίδιου μεγέθους/ύψους
-          όσο διαρκεί το πρώτο mount — έτσι δεν υπάρχει καθόλου σύγκριση
-          SSR/CSR σε αυτό το κομμάτι, άρα μηδέν πιθανότητα mismatch.
-        -->
-        <ClientOnly>
+        <div class="flex min-w-0 items-center gap-1">
+          <ClientOnly v-if="isAppArea">
+            <LazyAppNavigation />
+            <template #fallback>
+              <nav class="flex h-11 min-w-0 items-center gap-1" aria-hidden="true" />
+            </template>
+          </ClientOnly>
           <nav
+            v-else
             class="flex min-w-0 items-center gap-0.5 overflow-x-auto whitespace-nowrap sm:gap-1"
+            aria-label="Κύρια πλοήγηση"
           >
-            <template v-if="session">
-              <NuxtLink to="/app" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">Παραστατικά</NuxtLink>
-              <NuxtLink to="/app/diamones" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">Διαμονές</NuxtLink>
-              <NuxtLink to="/app/akinita" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">Ακίνητα</NuxtLink>
-              <NuxtLink to="/app/rythmiseis" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">Ρυθμίσεις</NuxtLink>
-              <button class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5" @click="handleSignOut">Έξοδος</button>
-            </template>
-            <template v-else>
-              <NuxtLink to="/login" class="btn-ghost shrink-0">Σύνδεση</NuxtLink>
-              <NuxtLink to="/register" class="btn-primary shrink-0">Ξεκίνα δωρεάν</NuxtLink>
-            </template>
+            <NuxtLink to="/login" class="btn-ghost shrink-0">Σύνδεση</NuxtLink>
+            <NuxtLink to="/register" class="btn-primary shrink-0">Ξεκίνα δωρεάν</NuxtLink>
           </nav>
-          <template #fallback>
-            <nav class="flex h-9 min-w-0 items-center gap-1" aria-hidden="true" />
-          </template>
-        </ClientOnly>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
 
@@ -71,24 +52,180 @@ async function handleSignOut() {
       <slot />
     </main>
 
-    <footer class="border-t py-8" style="border-color: var(--color-line)">
-      <div
-        class="mx-auto flex max-w-5xl flex-col gap-3 px-5 text-xs sm:flex-row sm:items-center sm:justify-between"
-        style="color: var(--color-ink-muted)"
-      >
-        <p>© {{ new Date().getFullYear() }} Εντάξει</p>
-        <nav class="flex gap-4">
-          <NuxtLink to="/oroi">Όροι Χρήσης</NuxtLink>
-          <NuxtLink to="/aporrito">Απόρρητο</NuxtLink>
-        </nav>
+    <footer class="mt-16 text-white" style="background: #12312f">
+      <div class="mx-auto max-w-5xl px-5 py-12 sm:py-14">
+        <div class="grid gap-10 sm:grid-cols-[minmax(0,1.8fr)_1fr_1fr] sm:gap-8">
+          <div class="max-w-sm">
+            <NuxtLink
+              to="/"
+              class="inline-flex items-center gap-3"
+              aria-label="Endaxi — Αρχική"
+            >
+              <span
+                class="flex size-10 items-center justify-center rounded-xl"
+                style="background: var(--color-brand); box-shadow: 0 8px 24px rgb(15 118 110 / 28%)"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="size-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    d="m5 12.5 4.25 4.25L19 7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.25"
+                  />
+                </svg>
+              </span>
+              <span class="text-xl font-bold tracking-tight">Endaxi</span>
+            </NuxtLink>
+
+            <p class="mt-5 text-base font-medium leading-relaxed" style="color: #e7f5f3">
+              Το ΤΑΚΚ σου, στην ώρα του.
+            </p>
+            <p class="mt-2 text-sm leading-relaxed" style="color: #a9c3c0">
+              Οργάνωση διαμονών και παραστατικών για ιδιοκτήτες βραχυχρόνιας
+              μίσθωσης στην Ελλάδα.
+            </p>
+
+            <div class="mt-6">
+              <p class="text-xs font-medium" style="color: #7fa29e">
+                Σύντομα στα social
+              </p>
+              <div class="mt-2 flex items-center gap-2" aria-label="Social media">
+                <button
+                  type="button"
+                  disabled
+                  class="flex size-11 items-center justify-center rounded-xl border opacity-55"
+                  style="border-color: rgb(169 195 192 / 24%); color: #d4e6e4"
+                  aria-label="Instagram — σύντομα"
+                  title="Instagram — σύντομα"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="size-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke-width="1.8" />
+                    <circle cx="12" cy="12" r="3.75" stroke-width="1.8" />
+                    <circle cx="17.6" cy="6.7" r="1" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  disabled
+                  class="flex size-11 items-center justify-center rounded-xl border opacity-55"
+                  style="border-color: rgb(169 195 192 / 24%); color: #d4e6e4"
+                  aria-label="Facebook — σύντομα"
+                  title="Facebook — σύντομα"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="size-5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M13.7 21v-8h2.7l.4-3.1h-3.1v-2c0-.9.3-1.5 1.6-1.5H17V3.6c-.8-.1-1.6-.2-2.4-.2-2.4 0-4.1 1.5-4.1 4.2v2.3H7.8V13h2.7v8h3.2Z" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  disabled
+                  class="flex size-11 items-center justify-center rounded-xl border opacity-55"
+                  style="border-color: rgb(169 195 192 / 24%); color: #d4e6e4"
+                  aria-label="X — σύντομα"
+                  title="X — σύντομα"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="size-4.5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M18.9 3H22l-6.8 7.8L23.2 21H17l-4.9-6.4L6.6 21H3.5l7.1-8.1L2.8 3h6.4l4.4 5.8L18.9 3Zm-1.1 16h1.7L8.3 4.9H6.5L17.8 19Z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <nav aria-label="Πλοήγηση προϊόντος">
+            <p class="text-xs font-semibold uppercase tracking-[0.14em]" style="color: #7fa29e">
+              Προϊόν
+            </p>
+            <ul class="mt-4 space-y-3 text-sm" style="color: #d4e6e4">
+              <li>
+                <NuxtLink to="/" class="transition-colors hover:text-white">Αρχική</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/register" class="transition-colors hover:text-white">
+                  Ξεκίνα δωρεάν
+                </NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/login" class="transition-colors hover:text-white">
+                  Σύνδεση
+                </NuxtLink>
+              </li>
+            </ul>
+          </nav>
+
+          <nav aria-label="Νομικές πληροφορίες">
+            <p class="text-xs font-semibold uppercase tracking-[0.14em]" style="color: #7fa29e">
+              Νομικά
+            </p>
+            <ul class="mt-4 space-y-3 text-sm" style="color: #d4e6e4">
+              <li>
+                <NuxtLink to="/oroi" class="transition-colors hover:text-white">
+                  Όροι Χρήσης
+                </NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/aporrito" class="transition-colors hover:text-white">
+                  Πολιτική Απορρήτου
+                </NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/cookies" class="transition-colors hover:text-white">
+                  Πολιτική Cookies
+                </NuxtLink>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  class="text-left transition-colors hover:text-white"
+                  @click="openCookiePreferences"
+                >
+                  Ρυθμίσεις cookies
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
+
+        <div
+          class="mt-10 flex flex-col gap-4 border-t pt-6 text-xs sm:flex-row sm:items-end sm:justify-between"
+          style="border-color: rgb(169 195 192 / 20%); color: #88a9a5"
+        >
+          <p class="shrink-0">© {{ new Date().getFullYear() }} Endaxi</p>
+          <p class="max-w-2xl leading-relaxed sm:text-right">
+            Το Endaxi είναι εργαλείο υπολογισμού και οργάνωσης. Δεν αποτελεί
+            φοροτεχνική συμβουλή και δεν υποβάλλει στοιχεία στην ΑΑΔΕ για λογαριασμό σου.
+          </p>
+        </div>
       </div>
-      <p
-        class="mx-auto mt-4 max-w-5xl px-5 text-[11px] leading-relaxed"
-        style="color: var(--color-ink-muted)"
-      >
-        Το Εντάξει είναι εργαλείο υπολογισμού και οργάνωσης. Δεν αποτελεί
-        φοροτεχνική συμβουλή και δεν υποβάλλει τίποτα στην ΑΑΔΕ για λογαριασμό σου.
-      </p>
     </footer>
+
+    <ClientOnly>
+      <CookieConsent />
+      <ChatWidgetLoader />
+    </ClientOnly>
   </div>
 </template>

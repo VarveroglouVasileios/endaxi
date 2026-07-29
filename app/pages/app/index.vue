@@ -36,10 +36,20 @@ interface Period {
   documents: Doc[]
 }
 
-const { data, pending, refresh } = await useFetch<{
-  periods: Period[]
-  total: number
-}>('/api/documents')
+interface Readiness {
+  ready: boolean
+  missing: Array<{ field: string; label: string; where: string }>
+  propertiesWithoutCalendar: Array<{ id: string; name: string }>
+  nextCheckOut: string | null
+}
+
+const [
+  { data, pending, refresh },
+  { data: readiness },
+] = await Promise.all([
+  useFetch<{ periods: Period[]; total: number }>('/api/documents'),
+  useFetch<Readiness>('/api/me/readiness'),
+])
 
 /** Η τρέχουσα εκκρεμότητα — αυτό που ψάχνει ο χρήστης */
 const current = computed(() => data.value?.periods[0] ?? null)
@@ -70,7 +80,7 @@ async function download(id: string) {
       </p>
     </div>
 
-    <ReadinessBanner class="mb-8" />
+    <ReadinessBanner :data="readiness" class="mb-8" />
 
     <h1 class="text-2xl font-bold">Παραστατικά ΤΑΚΚ</h1>
 
@@ -125,16 +135,16 @@ async function download(id: string) {
           <li
             v-for="d in p.documents"
             :key="d.id"
-            class="card flex items-center gap-4 !p-4"
+            class="card flex flex-col gap-3 !p-4 sm:flex-row sm:items-center sm:gap-4"
           >
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold tnum">
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="truncate text-xs font-semibold tnum">
                   {{ fullNumber(d.series, d.number, d.year) }}
                 </span>
                 <span
                   v-if="d.documentType === 'takk_cancellation'"
-                  class="badge"
+                  class="badge shrink-0"
                   style="background: var(--color-danger-bg); color: var(--color-danger)"
                 >
                   Ακυρωτικό
@@ -150,21 +160,23 @@ async function download(id: string) {
               </p>
             </div>
 
-            <span
-              class="shrink-0 text-sm font-semibold tnum"
-              :style="d.totalAmountCents < 0 ? 'color: var(--color-danger)' : ''"
-            >
-              {{ formatCents(d.totalAmountCents) }}
-            </span>
+            <div class="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+              <span
+                class="text-sm font-semibold tnum"
+                :style="d.totalAmountCents < 0 ? 'color: var(--color-danger)' : ''"
+              >
+                {{ formatCents(d.totalAmountCents) }}
+              </span>
 
-            <button
-              class="btn-secondary shrink-0 !px-3 !py-1.5 text-xs"
-              :disabled="!d.hasPdf || downloading === d.id"
-              :title="d.hasPdf ? 'Λήψη PDF' : 'Το PDF ετοιμάζεται'"
-              @click="download(d.id)"
-            >
-              {{ downloading === d.id ? '…' : d.hasPdf ? 'PDF' : '⏳' }}
-            </button>
+              <button
+                class="btn-secondary !px-3 text-xs"
+                :disabled="!d.hasPdf || downloading === d.id"
+                :title="d.hasPdf ? 'Λήψη PDF' : 'Το PDF ετοιμάζεται'"
+                @click="download(d.id)"
+              >
+                {{ downloading === d.id ? '…' : d.hasPdf ? 'PDF' : '⏳' }}
+              </button>
+            </div>
           </li>
         </ul>
       </section>

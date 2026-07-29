@@ -30,8 +30,8 @@ export class NumberingError extends Error {
 
 export interface IssueTakkParams {
   stayId: string
-  /** Παρακάμπτει τον έλεγχο διπλής έκδοσης — μόνο για admin επανέκδοση */
-  force?: boolean
+  /** Εκδίδονται μόνο μηνιαία τμήματα που έχουν ολοκληρωθεί έως αυτή την ημέρα. */
+  asOfDate?: string
 }
 
 export interface IssuedDocument {
@@ -102,7 +102,7 @@ export async function issueTakkDocuments(
      * index μας απέρριψε. ΔΕΝ είναι σφάλμα — είναι το σύστημα να
      * δουλεύει. Επιστρέφουμε ό,τι κέρδισε.
      */
-    if (isUniqueViolation(e) && !params.force) {
+    if (isUniqueViolation(e)) {
       const existing = await findReceiptsForStay(db, params.stayId)
       if (existing.length > 0) return existing
     }
@@ -146,7 +146,7 @@ async function issueTakkDocumentsInner(
   db: Database,
   params: IssueTakkParams,
 ): Promise<IssuedDocument[]> {
-  const { stayId, force = false } = params
+  const { stayId } = params
 
   return await db.transaction(async (tx) => {
     // ── 1. Φόρτωση διαμονής + ακινήτου + ιδιοκτήτη ──
@@ -212,6 +212,19 @@ async function issueTakkDocumentsInner(
           'Συμπλήρωσέ το στις ρυθμίσεις του λογαριασμού.',
       )
     }
+    if (
+      !user.legalAddressLine?.trim()
+      || !user.legalAddressCity?.trim()
+      || !user.legalAddressPostalCode?.trim()
+    ) {
+      throw new NumberingError(
+        'ΕΛΛΙΠΗ_ΣΤΟΙΧΕΙΑ: Λείπει η νόμιμη διεύθυνση του εκδότη. '
+        + 'Συμπλήρωσέ τη στις ρυθμίσεις του λογαριασμού.',
+      )
+    }
+    if (!property.addressLine?.trim() || !property.city?.trim() || !property.postalCode?.trim()) {
+      throw new NumberingError('ΕΛΛΙΠΗ_ΣΤΟΙΧΕΙΑ: Λείπει η διεύθυνση του καταλύματος.')
+    }
 
     /**
      * ── 3. Ιδιοδυναμία — γρήγορος έλεγχος ──
@@ -222,20 +235,16 @@ async function issueTakkDocumentsInner(
      * τη δίνει το partial unique index takk_documents_one_receipt_per_stay_idx,
      * και ο χειρισμός του γίνεται στο issueTakkDocument().
      */
-    if (!force) {
-      const existing = await tx
-        .select()
-        .from(takkDocuments)
-        .where(
-          and(
-            eq(takkDocuments.stayId, stayId),
-            eq(takkDocuments.documentType, 'takk_receipt'),
-          ),
-        )
-        .orderBy(takkDocuments.remittancePeriod)
-
-      if (existing.length > 0) return existing.map(toIssuedDocument)
-    }
+    const existing = await tx
+      .select({ remittancePeriod: takkDocuments.remittancePeriod })
+      .from(takkDocuments)
+      .where(
+        and(
+          eq(takkDocuments.stayId, stayId),
+          eq(takkDocuments.documentType, 'takk_receipt'),
+        ),
+      )
+    const existingPeriods = new Set(existing.map(document => document.remittancePeriod))
 
     // ── 4. Υπολογισμός ΤΑΚΚ ──
     const calc = calculateTakk({
@@ -250,6 +259,10 @@ async function issueTakkDocumentsInner(
 
     const series = property.documentSeries
     const issued: IssuedDocument[] = []
+    const asOfDate = params.asOfDate ?? stay.checkOut
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+      throw new NumberingError('Η ημερομηνία έκδοσης πρέπει να είναι YYYY-MM-DD')
+    }
 
     /**
      * ── 5. ΕΝΑ ΠΑΡΑΣΤΑΤΙΚΟ ΑΝΑ ΜΗΝΑ ──
@@ -259,6 +272,14 @@ async function issueTakkDocumentsInner(
      * παραστατικό στη σειρά του 2026 και ένα στη σειρά του 2027.
      */
     for (const segment of calc.segments) {
+      const segmentCompletedAt = addDays(segment.lastNight, 1)
+      if (
+        segmentCompletedAt > asOfDate
+        || existingPeriods.has(segment.remittancePeriod)
+      ) {
+        continue
+      }
+
       const year = Number(segment.month.slice(0, 4))
 
       // Upsert του counter — ασφαλές σε concurrency
@@ -307,12 +328,20 @@ async function issueTakkDocumentsInner(
           propertyName: property.name,
           issuerName,
           issuerAfm: normalizeAfm(user.afm),
+          issuerAddressLine: user.legalAddressLine,
+          issuerAddressCity: user.legalAddressCity,
+          issuerAddressPostalCode: user.legalAddressPostalCode,
+          propertyAddressLine: property.addressLine,
+          propertyCity: property.city,
+          propertyPostalCode: property.postalCode,
+          propertyCategory: property.category,
           // Οι ημερομηνίες του ΤΜΗΜΑΤΟΣ, όχι όλης της διαμονής
           checkIn: segment.firstNight,
           checkOut: addDays(segment.lastNight, 1),
           nights: segment.nights,
           guestName: stay.guestName,
           ratePerNightCents: segment.uniformRateCents ?? 0,
+          rateBreakdown: segment.breakdown,
           totalAmountCents: segment.totalAmountCents,
           remittancePeriod: segment.remittancePeriod,
         })
@@ -348,17 +377,6 @@ export async function cancelTakkDocument(
       throw new NumberingError('Δεν ακυρώνεται αντιλογιστικό παραστατικό')
     }
 
-    // Ήδη ακυρωμένο;
-    const existing = await tx
-      .select()
-      .from(takkDocuments)
-      .where(eq(takkDocuments.cancelsDocumentId, documentId))
-      .limit(1)
-
-    if (existing.length > 0) {
-      throw new NumberingError('Το παραστατικό έχει ήδη ακυρωθεί')
-    }
-
     // Το αντιλογιστικό παίρνει τον ΕΠΟΜΕΝΟ αριθμό της ίδιας σειράς
     const [locked] = await tx
       .select()
@@ -374,6 +392,18 @@ export async function cancelTakkDocument(
       .limit(1)
 
     if (!locked) throw new NumberingError('Αδυναμία κλειδώματος σειράς')
+
+    // Επανέλεγχος ΜΕΤΑ το lock: δεύτερο concurrent transaction βλέπει
+    // πλέον το commit του πρώτου. Το unique index είναι η τελική εγγύηση.
+    const existing = await tx
+      .select({ id: takkDocuments.id })
+      .from(takkDocuments)
+      .where(eq(takkDocuments.cancelsDocumentId, documentId))
+      .limit(1)
+
+    if (existing.length > 0) {
+      throw new NumberingError('Το παραστατικό έχει ήδη ακυρωθεί')
+    }
 
     const nextNumber = locked.lastNumber + 1
 
@@ -395,11 +425,19 @@ export async function cancelTakkDocument(
         propertyName: original.propertyName,
         issuerName: original.issuerName,
         issuerAfm: original.issuerAfm,
+        issuerAddressLine: original.issuerAddressLine,
+        issuerAddressCity: original.issuerAddressCity,
+        issuerAddressPostalCode: original.issuerAddressPostalCode,
+        propertyAddressLine: original.propertyAddressLine,
+        propertyCity: original.propertyCity,
+        propertyPostalCode: original.propertyPostalCode,
+        propertyCategory: original.propertyCategory,
         checkIn: original.checkIn,
         checkOut: original.checkOut,
         nights: original.nights,
         guestName: original.guestName,
         ratePerNightCents: original.ratePerNightCents,
+        rateBreakdown: original.rateBreakdown,
         // Αρνητικό ποσό — αντιλογισμός
         totalAmountCents: -original.totalAmountCents,
         remittancePeriod: original.remittancePeriod,

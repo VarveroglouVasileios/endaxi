@@ -3,9 +3,13 @@ import { authClient } from '~/lib/auth-client'
 import {
   isStrongPassword,
   isValidEmail,
-} from '../../shared/auth-validation'
+} from '#shared/auth-validation'
 
-useSeoMeta({ title: 'Εγγραφή — Εντάξει', robots: 'noindex' })
+useSeoMeta({
+  title: 'Εγγραφή — Endaxi',
+  description: 'Δημιουργία λογαριασμού Endaxi.',
+  robots: 'noindex, nofollow',
+})
 
 const name = ref('')
 const email = ref('')
@@ -15,6 +19,7 @@ const emailTouched = ref(false)
 const formSubmitted = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const verificationSent = ref(false)
 
 const emailHasError = computed(
   () => (emailTouched.value || formSubmitted.value) && !isValidEmail(email.value),
@@ -62,6 +67,7 @@ async function submit() {
       email: email.value.trim(),
       password: password.value,
       name: name.value.trim(),
+      callbackURL: '/onboarding',
     })
 
     if (e) {
@@ -76,15 +82,7 @@ async function submit() {
       return
     }
 
-    /**
-     * ΚΡΙΣΙΜΟ: `external: true` αναγκάζει πλήρες page reload αντί για
-     * client-side SPA navigation. Χωρίς αυτό, το `authClient.useSession()`
-     * στο middleware διαβάζει το ΠΑΛΙΟ (χωρίς session) cached state —
-     * βρέθηκε με πραγματικό browser test: ο χρήστης εγγραφόταν κανονικά
-     * αλλά αναπηδούσε σε /login αντί να πάει στο /onboarding.
-     * Με πλήρες reload, το session cookie διαβάζεται φρέσκο από τον server.
-     */
-    await navigateTo('/onboarding', { external: true })
+    verificationSent.value = true
   } catch {
     error.value = 'Δεν ήταν δυνατή η σύνδεση. Δοκίμασε ξανά.'
   } finally {
@@ -100,7 +98,19 @@ async function submit() {
       Δύο λεπτά και το ΤΑΚΚ σου τρέχει μόνο του.
     </p>
 
-    <form class="card mt-8 space-y-5" @submit.prevent="submit">
+    <div v-if="verificationSent" class="card mt-8 text-center" role="status">
+      <p class="eyebrow">Έλεγξε το email σου</p>
+      <h2 class="mt-3 text-xl font-bold">Σου στείλαμε σύνδεσμο επιβεβαίωσης</h2>
+      <p class="mt-3 text-sm leading-relaxed" style="color: var(--color-ink-soft)">
+        Άνοιξε το μήνυμα που στείλαμε στο <strong>{{ email.trim() }}</strong> και πάτησε
+        «Επιβεβαίωση email». Ο σύνδεσμος ισχύει για 60 λεπτά.
+      </p>
+      <p class="mt-4 text-xs" style="color: var(--color-ink-muted)">
+        Αν δεν το βλέπεις, έλεγξε και τον φάκελο ανεπιθύμητης αλληλογραφίας.
+      </p>
+    </div>
+
+    <form v-else class="card mt-8 space-y-5" @submit.prevent="submit">
       <div>
         <label for="name" class="label">Ονοματεπώνυμο</label>
         <input

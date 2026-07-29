@@ -1,10 +1,11 @@
 /**
  * EMAIL — Resend
  *
- * Τρεις ροές:
+ * Τέσσερις ροές:
  *  1. Απόδειξη ΤΑΚΚ στον επισκέπτη (με το PDF συνημμένο)
  *  2. Μηνιαία υπενθύμιση προθεσμίας στον host
  *  3. Σύνδεσμος επαναφοράς κωδικού στον χρήστη
+ *  4. Σύνδεσμος επιβεβαίωσης email κατά την εγγραφή
  *
  * ⚠️ Ποτέ δεν στέλνουμε τίποτα στην ΑΑΔΕ. Υπενθυμίζουμε στον χρήστη
  *    να υποβάλει· δεν υποβάλλουμε εμείς.
@@ -33,7 +34,7 @@ export interface SendParams {
   replyTo?: string
 }
 
-const FROM = process.env.EMAIL_FROM ?? 'Εντάξει <noreply@endaxi.app>'
+const FROM = process.env.EMAIL_FROM ?? 'Endaxi <noreply@endaxi.app>'
 
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY)

@@ -12,7 +12,7 @@
  * συγκεκριμένη προθεσμία αντί για αόριστη προειδοποίηση.
  */
 
-import { eq, and, gte, asc, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { users, properties, stays, icalSources } from '../../database/schema'
 import { isValidAfm } from '../../utils/afm'
@@ -39,6 +39,17 @@ export default defineEventHandler(async (event) => {
   if (!u.afm || !isValidAfm(u.afm)) {
     missing.push({ field: 'afm', label: 'ΑΦΜ', where: '/app/rythmiseis' })
   }
+  if (
+    !u.legalAddressLine?.trim()
+    || !u.legalAddressCity?.trim()
+    || !u.legalAddressPostalCode?.trim()
+  ) {
+    missing.push({
+      field: 'legalAddress',
+      label: 'Νόμιμη διεύθυνση εκδότη',
+      where: '/app/rythmiseis',
+    })
+  }
 
   // Ακίνητα χωρίς διεύθυνση — και αυτή είναι υποχρεωτική στο παραστατικό
   const props = await db
@@ -46,7 +57,9 @@ export default defineEventHandler(async (event) => {
     .from(properties)
     .where(and(eq(properties.userId, userId), eq(properties.isActive, true)))
 
-  const withoutAddress = props.filter((p) => !p.addressLine?.trim())
+  const withoutAddress = props.filter(
+    p => !p.addressLine?.trim() || !p.city?.trim() || !p.postalCode?.trim(),
+  )
   for (const p of withoutAddress) {
     missing.push({
       field: 'address',
@@ -57,7 +70,15 @@ export default defineEventHandler(async (event) => {
 
   // Ακίνητα χωρίς συνδεδεμένο ημερολόγιο — δεν θα έρθει ποτέ κράτηση
   const sources = props.length
-    ? await db.select().from(icalSources).where(eq(icalSources.isActive, true))
+    ? await db
+        .select()
+        .from(icalSources)
+        .where(
+          and(
+            eq(icalSources.isActive, true),
+            inArray(icalSources.propertyId, props.map(property => property.id)),
+          ),
+        )
     : []
   const withoutCalendar = props.filter(
     (p) => !sources.some((s) => s.propertyId === p.id),

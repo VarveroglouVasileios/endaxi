@@ -93,7 +93,7 @@ const pending = computed(() => staysList.value?.filter((s) => s.pendingIssuance)
       <li
         v-for="s in staysList"
         :key="s.id"
-        class="card flex items-center gap-4 !p-4"
+        class="card flex flex-col gap-3 !p-4 sm:flex-row sm:items-center sm:gap-4"
         :style="s.isComplimentary ? 'opacity: .7' : ''"
       >
         <div class="min-w-0 flex-1">
@@ -142,42 +142,44 @@ const pending = computed(() => staysList.value?.filter((s) => s.pendingIssuance)
           </p>
         </div>
 
-        <span
-          v-if="!s.isComplimentary"
-          class="shrink-0 text-sm font-semibold tnum"
-        >
-          {{ formatCents(s.estimatedAmountCents) }}
+        <div class="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
           <span
-            v-if="s.estimatedDocuments > 1"
-            class="block text-[10px] font-normal"
-            style="color: var(--color-ink-muted)"
+            v-if="!s.isComplimentary"
+            class="text-sm font-semibold tnum"
           >
-            σε {{ s.estimatedDocuments }} παραστατικά
+            {{ formatCents(s.estimatedAmountCents) }}
+            <span
+              v-if="s.estimatedDocuments > 1"
+              class="block text-xs font-normal"
+              style="color: var(--color-ink-muted)"
+            >
+              σε {{ s.estimatedDocuments }} παραστατικά
+            </span>
           </span>
-        </span>
 
-        <button
-          v-if="s.canMarkComplimentary"
-          class="btn-secondary shrink-0 !px-3 !py-1.5 text-xs"
-          :disabled="busy === s.id"
-          @click="toggleComplimentary(s)"
-        >
-          {{
-            busy === s.id
-              ? '…'
-              : s.isComplimentary
-                ? 'Αναίρεση'
-                : 'Δωρεάν'
-          }}
-        </button>
-        <span
-          v-else
-          class="shrink-0 text-[10px]"
-          style="color: var(--color-ink-muted)"
-          title="Έχει ήδη εκδοθεί παραστατικό"
-        >
-          κλειδωμένη
-        </span>
+          <button
+            v-if="s.canMarkComplimentary"
+            class="btn-secondary !px-3 text-xs"
+            :disabled="busy === s.id"
+            @click="toggleComplimentary(s)"
+          >
+            {{
+              busy === s.id
+                ? '…'
+                : s.isComplimentary
+                  ? 'Αναίρεση'
+                  : 'Δωρεάν'
+            }}
+          </button>
+          <span
+            v-else
+            class="text-xs"
+            style="color: var(--color-ink-muted)"
+            title="Έχει ήδη εκδοθεί παραστατικό"
+          >
+            κλειδωμένη
+          </span>
+        </div>
       </li>
     </ul>
   </div>

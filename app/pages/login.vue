@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { authClient } from '~/lib/auth-client'
+import { safePrivateRedirect } from '#shared/safe-redirect'
 
-useSeoMeta({ title: 'Σύνδεση — Εντάξει', robots: 'noindex' })
+useSeoMeta({
+  title: 'Σύνδεση — Endaxi',
+  description: 'Σύνδεση στον λογαριασμό Endaxi.',
+  robots: 'noindex, nofollow',
+})
 
 const route = useRoute()
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
+const needsVerification = ref(false)
+const resendLoading = ref(false)
+const resendStatus = ref<string | null>(null)
 
 // Δες το αντίστοιχο σχόλιο στο register.vue — ίδιο hydration-race bug.
 const mounted = ref(false)
@@ -17,6 +25,8 @@ onMounted(() => {
 
 async function submit() {
   error.value = null
+  needsVerification.value = false
+  resendStatus.value = null
   loading.value = true
 
   const { error: e } = await authClient.signIn.email({
@@ -26,13 +36,29 @@ async function submit() {
   loading.value = false
 
   if (e) {
-    error.value = 'Λάθος email ή κωδικός.'
+    needsVerification.value = true
+    error.value = 'Λάθος email ή κωδικός, ή ο λογαριασμός δεν έχει ενεργοποιηθεί.'
     return
   }
 
   // Ίδιος λόγος με το register.vue — δες το σχόλιο εκεί.
-  const next = (route.query.next as string) || '/app'
+  const next = safePrivateRedirect(route.query.next)
   await navigateTo(next, { external: true })
+}
+
+async function resendVerification() {
+  resendLoading.value = true
+  resendStatus.value = null
+  try {
+    await authClient.sendVerificationEmail({
+      email: email.value.trim(),
+      callbackURL: '/onboarding',
+    })
+  } finally {
+    resendLoading.value = false
+    resendStatus.value =
+      'Το αίτημα ολοκληρώθηκε. Αν υπάρχει μη ενεργοποιημένος λογαριασμός και επιτρέπεται νέα αποστολή, θα λάβεις email.'
+  }
 }
 </script>
 
@@ -54,16 +80,7 @@ async function submit() {
       </div>
 
       <div>
-        <div class="mb-1.5 flex items-center justify-between gap-3">
-          <label for="password" class="text-sm font-medium">Κωδικός</label>
-          <NuxtLink
-            to="/forgot-password"
-            class="text-xs font-medium underline"
-            style="color: var(--color-brand-dark)"
-          >
-            Ξέχασες τον κωδικό;
-          </NuxtLink>
-        </div>
+        <label for="password" class="label">Κωδικός</label>
         <input
           id="password"
           v-model="password"
@@ -72,9 +89,31 @@ async function submit() {
           required
           autocomplete="current-password"
         />
+        <div class="mt-2 text-right">
+          <NuxtLink
+            to="/forgot-password"
+            class="text-xs font-medium underline"
+            style="color: var(--color-brand-dark)"
+          >
+            Ξέχασες τον κωδικό;
+          </NuxtLink>
+        </div>
       </div>
 
       <p v-if="error" class="notice-danger">{{ error }}</p>
+      <div v-if="needsVerification" class="text-center">
+        <button
+          type="button"
+          class="btn-ghost"
+          :disabled="resendLoading"
+          @click="resendVerification"
+        >
+          {{ resendLoading ? 'Αποστολή…' : 'Αποστολή νέου συνδέσμου' }}
+        </button>
+        <p v-if="resendStatus" class="mt-2 text-xs" role="status">
+          {{ resendStatus }}
+        </p>
+      </div>
 
       <button type="submit" class="btn-primary w-full" :disabled="!mounted || loading">
         {{ loading ? 'Σύνδεση…' : 'Σύνδεση' }}

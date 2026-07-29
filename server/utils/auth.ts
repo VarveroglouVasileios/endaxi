@@ -14,10 +14,21 @@ import {
   isValidEmail,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-} from '../../shared/auth-validation'
+} from '#shared/auth-validation'
 import { useDatabase } from '../database/client'
 import * as schema from '../database/schema'
+import { sendEmailVerificationEmail } from './email/email-verification'
 import { sendPasswordResetEmail } from './email/password-reset'
+import {
+  checkRateLimits,
+  createRateLimitIdentifier,
+  EMAIL_VERIFICATION_EMAIL_RULE,
+} from './rate-limit'
+import { TRUSTED_CLIENT_IP_HEADER } from './request-ip'
+
+const trustedIpHeaders = process.env.TRUST_AZURE_PROXY === '1'
+  ? [TRUSTED_CLIENT_IP_HEADER]
+  : []
 
 /**
  * Το `betterAuth()` επιστρέφει `Auth<TOptions>` — γενικευμένο στο ΔΙΚΟ ΜΑΣ
@@ -27,6 +38,18 @@ import { sendPasswordResetEmail } from './email/password-reset'
  * και αφήνουμε το TypeScript να συμπεράνει.
  */
 function createAuth() {
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32) {
+      throw new Error('BETTER_AUTH_SECRET must contain at least 32 characters in production')
+    }
+    if (!process.env.NUXT_PUBLIC_APP_URL?.startsWith('https://')) {
+      throw new Error('NUXT_PUBLIC_APP_URL must be an HTTPS URL in production')
+    }
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is required for email verification in production')
+    }
+  }
+
   return betterAuth({
     database: drizzleAdapter(useDatabase(), {
       provider: 'pg',
@@ -41,11 +64,23 @@ function createAuth() {
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.NUXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
 
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        const [emailLimit] = await checkRateLimits(
+          [EMAIL_VERIFICATION_EMAIL_RULE],
+          createRateLimitIdentifier(`email:${user.email.trim().toLowerCase()}`),
+        )
+        if (!emailLimit?.success) throw new Error('EMAIL_VERIFICATION_RATE_LIMITED')
+        await sendEmailVerificationEmail(user.email, url)
+      },
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      expiresIn: 60 * 60,
+    },
+
     emailAndPassword: {
       enabled: true,
-      // Χωρίς επαλήθευση email στο MVP — μειώνει τριβή στο onboarding.
-      // Ενεργοποίησέ το πριν βγεις σε κοινό.
-      requireEmailVerification: false,
+      requireEmailVerification: true,
       minPasswordLength: PASSWORD_MIN_LENGTH,
       maxPasswordLength: PASSWORD_MAX_LENGTH,
       resetPasswordTokenExpiresIn: 60 * 60,
@@ -105,11 +140,11 @@ function createAuth() {
        * rate limiting — δηλαδή ένας επιτιθέμενος κλειδώνει όλους,
        * και κανένα brute-force δεν περιορίζεται ανά διεύθυνση.
        *
-       * Η σειρά έχει σημασία: το cf-connecting-ip δεν πλαστογραφείται
-       * πίσω από Cloudflare, το x-forwarded-for παίρνει το πρώτο hop.
+       * Εμπιστευόμαστε proxy header μόνο όταν ξέρουμε ποιος proxy το
+       * αντικαθιστά. Διαφορετικά ένας client μπορεί να πλαστογραφήσει IP.
        */
       ipAddress: {
-        ipAddressHeaders: ['cf-connecting-ip', 'x-forwarded-for'],
+        ipAddressHeaders: trustedIpHeaders,
       },
     },
 

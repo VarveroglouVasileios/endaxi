@@ -10,11 +10,15 @@ import { eq } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { users, auditLog } from '../../database/schema'
 import { isValidAfm, normalizeAfm, afmError } from '../../utils/afm'
+import { getTrustedClientIp } from '../../utils/request-ip'
 
 const bodySchema = z.object({
   name: z.string().min(2).max(120).optional(),
   afm: z.string().max(20).optional(),
   phone: z.string().max(30).optional(),
+  legalAddressLine: z.string().min(3).max(300).optional(),
+  legalAddressCity: z.string().min(2).max(120).optional(),
+  legalAddressPostalCode: z.string().min(4).max(20).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -45,6 +49,15 @@ export default defineEventHandler(async (event) => {
   }
 
   if (body.phone !== undefined) patch.phone = body.phone.trim() || null
+  if (body.legalAddressLine !== undefined) {
+    patch.legalAddressLine = body.legalAddressLine.trim()
+  }
+  if (body.legalAddressCity !== undefined) {
+    patch.legalAddressCity = body.legalAddressCity.trim()
+  }
+  if (body.legalAddressPostalCode !== undefined) {
+    patch.legalAddressPostalCode = body.legalAddressPostalCode.trim()
+  }
 
   const [updated] = await db
     .update(users)
@@ -59,7 +72,7 @@ export default defineEventHandler(async (event) => {
     entityId: userId,
     // ΔΕΝ καταγράφουμε το ίδιο το ΑΦΜ — μόνο ότι άλλαξε
     metadata: { fields: Object.keys(body) },
-    ipAddress: getRequestIP(event, { xForwardedFor: true }),
+    ipAddress: getTrustedClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent'),
   })
 
@@ -69,6 +82,13 @@ export default defineEventHandler(async (event) => {
     name,
     afm: updated!.afm,
     phone: updated!.phone,
-    canIssue: Boolean(name?.trim()) && Boolean(updated!.afm && isValidAfm(updated!.afm)),
+    legalAddressLine: updated!.legalAddressLine,
+    legalAddressCity: updated!.legalAddressCity,
+    legalAddressPostalCode: updated!.legalAddressPostalCode,
+    canIssue: Boolean(name?.trim())
+      && Boolean(updated!.afm && isValidAfm(updated!.afm))
+      && Boolean(updated!.legalAddressLine?.trim())
+      && Boolean(updated!.legalAddressCity?.trim())
+      && Boolean(updated!.legalAddressPostalCode?.trim()),
   }
 })

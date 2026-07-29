@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { authClient } from '~/lib/auth-client'
-import { isStrongPassword } from '../../shared/auth-validation'
+import { isStrongPassword } from '#shared/auth-validation'
 
-useSeoMeta({ title: 'Νέος κωδικός — Εντάξει', robots: 'noindex' })
+useSeoMeta({
+  title: 'Νέος κωδικός — Endaxi',
+  description: 'Ορισμός νέου κωδικού πρόσβασης Endaxi.',
+  robots: 'noindex, nofollow',
+})
 
 const route = useRoute()
 const password = ref('')

@@ -40,6 +40,56 @@
   --radius-card: 0.875rem;
 }
 
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-paper: #11110f;
+  --color-surface: #1a1917;
+  --color-line: #302f2b;
+  --color-line-strong: #45433e;
+  --color-ink: #f5f4f1;
+  --color-ink-soft: #c7c3bd;
+  --color-ink-muted: #918c84;
+  --color-brand: #0f766e;
+  --color-brand-dark: #5eead4;
+  --color-brand-light: #123a36;
+  --color-warn: #fbbf24;
+  --color-warn-bg: #30250d;
+  --color-danger: #f87171;
+  --color-danger-bg: #351314;
+  --color-ok: #4ade80;
+  --color-ok-bg: #102a18;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-paper: #11110f;
+    --color-surface: #1a1917;
+    --color-line: #302f2b;
+    --color-line-strong: #45433e;
+    --color-ink: #f5f4f1;
+    --color-ink-soft: #c7c3bd;
+    --color-ink-muted: #918c84;
+    --color-brand: #0f766e;
+    --color-brand-dark: #5eead4;
+    --color-brand-light: #123a36;
+    --color-warn: #fbbf24;
+    --color-warn-bg: #30250d;
+    --color-danger: #f87171;
+    --color-danger-bg: #351314;
+    --color-ok: #4ade80;
+    --color-ok-bg: #102a18;
+  }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -52,6 +102,9 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    transition:
+      background-color 180ms ease,
+      color 180ms ease;
   }
 
   /* Ελληνικά: λίγο πιο ανοιχτό tracking βοηθά την αναγνωσιμότητα */
@@ -80,7 +133,7 @@
  * γίνεται και να το κάνεις @apply αλλού. Πρέπει να είναι top-level.
  */
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5
          text-sm font-medium transition-colors disabled:opacity-50
          disabled:cursor-not-allowed;
 }
@@ -100,7 +153,8 @@
     background: var(--color-brand-dark);
   }
   .btn-secondary {
-    @apply btn bg-white;
+    @apply btn;
+    background: var(--color-surface);
     color: var(--color-ink);
     border: 1px solid var(--color-line-strong);
   }
@@ -121,7 +175,8 @@
 
   /* ── Κάρτες ── */
   .card {
-    @apply bg-white p-6;
+    @apply p-6;
+    background: var(--color-surface);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
   }
@@ -136,7 +191,8 @@
     color: var(--color-ink-muted);
   }
   .input {
-    @apply w-full rounded-lg bg-white px-3.5 py-2.5 text-sm transition-colors;
+    @apply w-full rounded-lg px-3.5 py-2.5 text-sm transition-colors;
+    background: var(--color-surface);
     border: 1px solid var(--color-line-strong);
     color: var(--color-ink);
   }
@@ -185,7 +241,7 @@
   /* ── Ετικέτες ── */
   .eyebrow {
     @apply text-xs font-bold uppercase tracking-widest;
-    color: var(--color-brand);
+    color: var(--color-brand-dark);
   }
   .badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
@@ -195,5 +251,32 @@
   /* Αριθμοί παραστατικών & ποσά: tabular ώστε να στοιχίζονται */
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+:root[data-theme='dark'] .bg-white {
+  background-color: var(--color-surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .bg-white {
+    background-color: var(--color-surface);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(1.5rem);
+    transition:
+      opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .scroll-reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

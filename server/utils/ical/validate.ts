@@ -7,6 +7,7 @@
  * κατέβασμα — και του λέμε τι βρήκαμε.
  */
 
+import { fetchPublicText, PublicFetchError } from '../http/safe-public-fetch'
 import { parseIcalFeed, detectPlatform, type IcalPlatform } from './parser'
 
 export interface ValidationResult {
@@ -42,7 +43,6 @@ function fail(
 }
 
 export async function validateIcalUrl(rawUrl: string): Promise<ValidationResult> {
-  // ── Έλεγχος μορφής ──
   let url: URL
   try {
     url = new URL(rawUrl.trim())
@@ -50,22 +50,8 @@ export async function validateIcalUrl(rawUrl: string): Promise<ValidationResult>
     return fail('bad_url', 'Ο σύνδεσμος δεν φαίνεται έγκυρος. Έλεγξε ότι τον αντέγραψες ολόκληρο.')
   }
 
-  if (!['http:', 'https:'].includes(url.protocol)) {
+  if (url.protocol !== 'https:') {
     return fail('bad_url', 'Ο σύνδεσμος πρέπει να ξεκινά με https://')
-  }
-
-  // SSRF προστασία: μόνο δημόσιοι προορισμοί
-  const host = url.hostname.toLowerCase()
-  if (
-    host === 'localhost' ||
-    host === '::1' ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    /^169\.254\./.test(host)
-  ) {
-    return fail('bad_url', 'Δεν επιτρέπονται τοπικές διευθύνσεις.')
   }
 
   const platform = detectPlatform(url.href)
@@ -73,13 +59,13 @@ export async function validateIcalUrl(rawUrl: string): Promise<ValidationResult>
   // ── Κατέβασμα ──
   let text: string
   try {
-    const res = await fetch(url.href, {
-      headers: { 'User-Agent': 'Endaxi/1.0 (+https://endaxi.app)' },
-      signal: AbortSignal.timeout(15_000),
-      redirect: 'follow',
+    const res = await fetchPublicText(url.href, {
+      maxBytes: MAX_BYTES,
+      timeoutMs: 15_000,
+      maxRedirects: 3,
     })
 
-    if (!res.ok) {
+    if (res.status < 200 || res.status >= 300) {
       return fail(
         'unreachable',
         res.status === 404
@@ -89,14 +75,20 @@ export async function validateIcalUrl(rawUrl: string): Promise<ValidationResult>
       )
     }
 
-    const len = Number(res.headers.get('content-length') ?? 0)
-    if (len > MAX_BYTES) {
+    text = res.text
+  } catch (error) {
+    const fetchError = error instanceof PublicFetchError ? error : null
+    const timedOut = fetchError?.code === 'timeout'
+    const blocked =
+      fetchError?.code === 'bad_url' || fetchError?.code === 'blocked_target'
+    const tooLarge = fetchError?.code === 'too_large'
+
+    if (blocked) {
+      return fail('bad_url', 'Δεν επιτρέπεται αυτός ο προορισμός.', platform)
+    }
+    if (tooLarge) {
       return fail('not_ical', 'Το αρχείο είναι υπερβολικά μεγάλο.', platform)
     }
-
-    text = await res.text()
-  } catch (e) {
-    const timedOut = (e as Error)?.name === 'TimeoutError'
     return fail(
       timedOut ? 'timeout' : 'unreachable',
       timedOut

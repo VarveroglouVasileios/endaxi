@@ -51,17 +51,20 @@ export const handleNewStay = inngest.createFunction(
       return { action: 'skipped', reason: `status=${stay.status} nights=${stay.nights}` }
     }
 
-    // Έχει ήδη αναχωρήσει; → έκδοση τώρα, όχι αύριο
-    const today = new Date().toISOString().slice(0, 10)
-    if (stay.checkOut > today) {
-      return { action: 'deferred', reason: 'future_checkout', checkOut: stay.checkOut }
-    }
+    // Εκδίδουμε μόνο όσα μηνιαία τμήματα έχουν ήδη ολοκληρωθεί έως σήμερα.
+    // Το numbering αγνοεί μελλοντικά τμήματα, άρα δεν περιμένουμε το τελικό checkout.
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Athens',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
 
     await step.sendEvent(
       'request-issuance',
-      takkIssueRequested.create({ stayId: stay.id }),
+      takkIssueRequested.create({ stayId: stay.id, asOfDate: today }),
     )
 
-    return { action: 'issuance_requested', checkOut: stay.checkOut }
+    return { action: 'issuance_requested', asOfDate: today, checkOut: stay.checkOut }
   },
 )

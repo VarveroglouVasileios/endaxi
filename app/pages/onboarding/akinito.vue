@@ -164,14 +164,21 @@ async function submit() {
           placeholder="Δράκου 12"
         />
         <div class="mt-3 grid grid-cols-2 gap-3">
-          <input v-model="form.city" class="input" required placeholder="Πόλη" />
+          <div>
+            <label for="city" class="label">Πόλη</label>
+            <input id="city" v-model="form.city" class="input" required autocomplete="address-level2" />
+          </div>
+          <div>
+            <label for="postal-code" class="label">Τ.Κ.</label>
           <input
+            id="postal-code"
             v-model="form.postalCode"
             class="input tnum"
             required
             inputmode="numeric"
-            placeholder="Τ.Κ."
+            autocomplete="postal-code"
           />
+          </div>
         </div>
         <p class="hint">
           Ο νόμος απαιτεί τη διεύθυνση στο παραστατικό

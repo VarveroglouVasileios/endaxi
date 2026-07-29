@@ -167,7 +167,7 @@ describe('diffStays — sync logic', () => {
     expect(d.toUpdate[0]!.existingId).toBe('s1')
   })
 
-  it('ΚΡΙΣΙΜΟ: κράτηση που εξαφανίστηκε = ακύρωση', () => {
+  it('σημειώνει την εξαφάνιση ως υποψήφια ακύρωση για επιβεβαίωση', () => {
     const existing = [
       { id: 's1', externalUid: 'a', checkIn: '2026-07-10', checkOut: '2026-07-13', status: 'confirmed' },
       { id: 's2', externalUid: 'b', checkIn: '2026-08-01', checkOut: '2026-08-05', status: 'confirmed' },
@@ -182,6 +182,19 @@ describe('diffStays — sync logic', () => {
     ]
     const d = diffStays(existing, [])
     expect(d.toCancel).toHaveLength(0)
+  })
+
+  it('στέλνει για έλεγχο κράτηση που επανεμφανίζεται μετά από ακύρωση', () => {
+    const existing = [
+      { id: 's1', externalUid: 'a', checkIn: '2026-07-10', checkOut: '2026-07-13', status: 'cancelled' },
+    ]
+    const d = diffStays(existing, [ev('a', '2026-07-10', '2026-07-13')])
+
+    expect(d.unchanged).toBe(0)
+    expect(d.toUpdate).toHaveLength(0)
+    expect(d.toReview).toEqual([
+      expect.objectContaining({ existingId: 's1' }),
+    ])
   })
 
   it('συνδυασμένο σενάριο', () => {

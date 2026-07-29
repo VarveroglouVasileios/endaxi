@@ -6,14 +6,17 @@
  * Inngest v4: τα triggers ζουν μέσα στο πρώτο όρισμα του createFunction.
  */
 
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { NonRetriableError, cron } from 'inngest'
 import { inngest } from '../client'
-import { icalSyncRequested, stayCreated, stayCancelled } from '../events'
+import { icalSyncRequested, stayCreated } from '../events'
 import { useDatabase } from '../../database/client'
-import { icalSources, stays } from '../../database/schema'
+import { icalSources, stays, takkDocuments } from '../../database/schema'
+import { fetchPublicText, PublicFetchError } from '../../utils/http/safe-public-fetch'
 import { parseIcalFeed, diffStays } from '../../utils/ical/parser'
 import { countNights } from '../../utils/takk/calculator'
+
+const MAX_ICAL_BYTES = 5 * 1024 * 1024
 
 /** Cron: κάθε 2 ώρες, στέλνει sync event για κάθε ενεργή πηγή */
 export const scheduleIcalSync = inngest.createFunction(
@@ -50,6 +53,26 @@ export const syncIcalSource = inngest.createFunction(
     retries: 3,
     // Ένα sync ανά πηγή τη φορά — αποφεύγει διπλές εγγραφές
     concurrency: { key: 'event.data.icalSourceId', limit: 1 },
+    onFailure: async ({ event }) => {
+      const originalEvent = event.data.event
+      const icalSourceId = originalEvent.data.icalSourceId
+      if (typeof icalSourceId !== 'string') return
+
+      const db = useDatabase()
+      await db
+        .update(icalSources)
+        .set({
+          lastSyncStatus: 'failed',
+          lastSyncError: 'Η λήψη ή επεξεργασία του ημερολογίου απέτυχε.',
+          consecutiveFailures: sql`${icalSources.consecutiveFailures} + 1`,
+        })
+        .where(
+          and(
+            eq(icalSources.id, icalSourceId),
+            eq(icalSources.isActive, true),
+          ),
+        )
+    },
   },
   async ({ event, step }) => {
     const db = useDatabase()
@@ -70,12 +93,24 @@ export const syncIcalSource = inngest.createFunction(
 
     // ── 2. Κατέβασμα feed ──
     const icsText = await step.run('fetch-feed', async () => {
-      const res = await fetch(source.url, {
-        headers: { 'User-Agent': 'Endaxi/1.0 (+https://endaxi.app)' },
-        signal: AbortSignal.timeout(30_000),
-      })
+      let res
+      try {
+        res = await fetchPublicText(source.url, {
+          maxBytes: MAX_ICAL_BYTES,
+          timeoutMs: 30_000,
+          maxRedirects: 3,
+        })
+      } catch (error) {
+        if (
+          error instanceof PublicFetchError
+          && ['bad_url', 'blocked_target', 'too_large', 'too_many_redirects'].includes(error.code)
+        ) {
+          throw new NonRetriableError(`Μη ασφαλές ή μη έγκυρο iCal feed (${error.code})`)
+        }
+        throw error
+      }
 
-      if (!res.ok) {
+      if (res.status < 200 || res.status >= 300) {
         // 404/410 = ο host άλλαξε/διέγραψε το link — μην ξαναπροσπαθείς
         if (res.status === 404 || res.status === 410) {
           throw new NonRetriableError(`Το iCal link δεν υπάρχει (${res.status})`)
@@ -83,7 +118,11 @@ export const syncIcalSource = inngest.createFunction(
         throw new Error(`Αποτυχία λήψης feed: ${res.status}`)
       }
 
-      return await res.text()
+      if (!res.text.includes('BEGIN:VCALENDAR')) {
+        throw new NonRetriableError('Η απόκριση δεν είναι έγκυρο iCal feed')
+      }
+
+      return res.text
     })
 
     // ── 3. Parsing ──
@@ -113,6 +152,9 @@ export const syncIcalSource = inngest.createFunction(
     // ── 5. Εφαρμογή ──
     const applied = await step.run('apply-diff', async () => {
       const created: string[] = []
+      const updated: string[] = []
+      const reviewRequired = new Set(diff.toCancel)
+      for (const candidate of diff.toReview) reviewRequired.add(candidate.existingId)
 
       for (const ev of diff.toCreate) {
         const nights = countNights(ev.checkIn, ev.checkOut)
@@ -141,6 +183,24 @@ export const syncIcalSource = inngest.createFunction(
       }
 
       for (const u of diff.toUpdate) {
+        const [issuedDocument] = await db
+          .select({ id: takkDocuments.id })
+          .from(takkDocuments)
+          .where(
+            and(
+              eq(takkDocuments.stayId, u.existingId),
+              eq(takkDocuments.documentType, 'takk_receipt'),
+            ),
+          )
+          .limit(1)
+
+        // Once a legal document exists, changing the stay requires an explicit
+        // cancellation/replacement workflow. Never silently mutate its source.
+        if (issuedDocument) {
+          reviewRequired.add(u.existingId)
+          continue
+        }
+
         const nights = countNights(u.event.checkIn, u.event.checkOut)
         await db
           .update(stays)
@@ -153,26 +213,22 @@ export const syncIcalSource = inngest.createFunction(
             updatedAt: new Date(),
           })
           .where(eq(stays.id, u.existingId))
-      }
-
-      for (const stayId of diff.toCancel) {
-        await db
-          .update(stays)
-          .set({ status: 'cancelled', updatedAt: new Date() })
-          .where(eq(stays.id, stayId))
+        updated.push(u.existingId)
       }
 
       await db
         .update(icalSources)
         .set({
           lastSyncedAt: new Date(),
-          lastSyncStatus: 'ok',
-          lastSyncError: null,
+          lastSyncStatus: reviewRequired.size > 0 ? 'review_required' : 'ok',
+          lastSyncError: reviewRequired.size > 0
+            ? 'Εντοπίστηκαν αλλαγές που χρειάζονται έλεγχο πριν ενημερωθούν παραστατικά.'
+            : null,
           consecutiveFailures: 0,
         })
         .where(eq(icalSources.id, source.id))
 
-      return { created, updated: diff.toUpdate.length, cancelled: diff.toCancel }
+      return { created, updated, reviewRequired: [...reviewRequired] }
     })
 
     // ── 6. Events για επόμενα βήματα ──
@@ -183,17 +239,10 @@ export const syncIcalSource = inngest.createFunction(
       )
     }
 
-    if (applied.cancelled.length > 0) {
-      await step.sendEvent(
-        'emit-cancelled',
-        applied.cancelled.map((id) => stayCancelled.create({ stayId: id })),
-      )
-    }
-
     return {
       created: applied.created.length,
-      updated: applied.updated,
-      cancelled: applied.cancelled.length,
+      updated: applied.updated.length,
+      reviewRequired: applied.reviewRequired.length,
       unchanged: diff.unchanged,
     }
   },

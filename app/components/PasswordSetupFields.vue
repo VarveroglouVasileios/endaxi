@@ -4,7 +4,7 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PASSWORD_RULES,
-} from '../../shared/auth-validation'
+} from '#shared/auth-validation'
 
 const props = withDefaults(
   defineProps<{

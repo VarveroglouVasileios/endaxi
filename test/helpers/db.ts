@@ -14,10 +14,31 @@ import * as schema from '../../server/database/schema'
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>
 
 export function connectionString(): string {
-  return (
+  const connectionString = (
     process.env.TEST_DATABASE_URL ??
-    'postgresql://endaxi:endaxi@127.0.0.1:54329/endaxi'
+    'postgresql://endaxi:endaxi@127.0.0.1:54330/endaxi_test'
   )
+  const url = new URL(connectionString)
+
+  if (
+    process.env.DATABASE_URL
+    && new URL(process.env.DATABASE_URL).toString() === url.toString()
+  ) {
+    throw new Error('Refusing destructive tests: TEST_DATABASE_URL matches DATABASE_URL')
+  }
+
+  if (!url.pathname.toLowerCase().endsWith('_test')) {
+    throw new Error('Refusing destructive tests: database name must end with "_test"')
+  }
+
+  const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost'
+  if (!isLocal && process.env.ALLOW_REMOTE_TEST_DATABASE !== '1') {
+    throw new Error(
+      'Refusing destructive tests on a remote host without ALLOW_REMOTE_TEST_DATABASE=1',
+    )
+  }
+
+  return connectionString
 }
 
 export function createTestDb(): { db: TestDb; close: () => Promise<void> } {
@@ -55,6 +76,9 @@ export async function createSchema(db: TestDb): Promise<void> {
       afm text,
       phone text,
       locale text NOT NULL DEFAULT 'el',
+      legal_address_line text,
+      legal_address_city text,
+      legal_address_postal_code text,
       declared_property_count integer NOT NULL DEFAULT 1,
       tax_regime tax_regime NOT NULL DEFAULT 'individual_upto_2',
       regime_declared_at timestamptz NOT NULL DEFAULT now(),
@@ -175,6 +199,14 @@ export async function createSchema(db: TestDb): Promise<void> {
       property_name text NOT NULL,
       issuer_name text,
       issuer_afm text,
+      issuer_address_line text,
+      issuer_address_city text,
+      issuer_address_postal_code text,
+      property_address_line text,
+      property_city text,
+      property_postal_code text,
+      property_category_snapshot property_category,
+      rate_breakdown jsonb,
       check_in date NOT NULL,
       check_out date NOT NULL,
       nights integer NOT NULL,
@@ -196,6 +228,9 @@ export async function createSchema(db: TestDb): Promise<void> {
     CREATE UNIQUE INDEX takk_documents_one_receipt_per_stay_month_idx
       ON takk_documents (stay_id, remittance_period)
       WHERE document_type = 'takk_receipt';
+    CREATE UNIQUE INDEX takk_documents_one_cancellation_per_document_idx
+      ON takk_documents (cancels_document_id)
+      WHERE cancels_document_id IS NOT NULL;
 
     CREATE TABLE audit_log (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -241,6 +276,9 @@ export async function seedUser(
       fullName: 'Βασίλης Βαρβέρογλου',
       // Έγκυρο κατά τον αλγόριθμο ελέγχου — δεν είναι υπαρκτό ΑΦΜ
       afm: VALID_TEST_AFM,
+      legalAddressLine: 'Οδός Δοκιμής 1',
+      legalAddressCity: 'Αθήνα',
+      legalAddressPostalCode: '11742',
       taxRegime: 'individual_upto_2',
       declaredPropertyCount: 1,
       ...overrides,
@@ -262,6 +300,9 @@ export async function seedProperty(
       name: 'Διαμέρισμα Κουκάκι',
       category: 'str_standard',
       documentSeries: 'Α',
+      addressLine: 'Δράκου 12',
+      city: 'Αθήνα',
+      postalCode: '11742',
       ...overrides,
     })
     .returning()

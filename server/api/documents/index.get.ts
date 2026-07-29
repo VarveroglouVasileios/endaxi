@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { takkDocuments, properties } from '../../database/schema'
 import { getRemittanceDeadline } from '../../utils/takk/calculator'
@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
       guestName: takkDocuments.guestName,
       totalAmountCents: takkDocuments.totalAmountCents,
       remittancePeriod: takkDocuments.remittancePeriod,
-      hasPdf: takkDocuments.pdfStorageKey,
+      hasPdf: sql<boolean>`${takkDocuments.pdfStorageKey} is not null`,
       cancelsDocumentId: takkDocuments.cancelsDocumentId,
     })
     .from(takkDocuments)
