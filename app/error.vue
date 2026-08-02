@@ -8,10 +8,23 @@ const props = defineProps<{
 
 const statusCode = computed(() => props.error.statusCode ?? 500)
 const isNotFound = computed(() => statusCode.value === 404)
+const isForbidden = computed(() => statusCode.value === 403)
+
+const title = computed(() => {
+  if (isNotFound.value) return 'Η σελίδα δεν βρέθηκε'
+  if (isForbidden.value) return 'Δεν έχεις πρόσβαση'
+  return 'Κάτι πήγε στραβά'
+})
+
+const description = computed(() => {
+  if (isNotFound.value) return 'Ο σύνδεσμος ίσως έχει αλλάξει ή η σελίδα δεν υπάρχει.'
+  if (isForbidden.value) return 'Δεν έχεις δικαίωμα πρόσβασης σε αυτή τη σελίδα με τον τρέχοντα λογαριασμό σου.'
+  return 'Η υπηρεσία αντιμετώπισε προσωρινό πρόβλημα. Δοκίμασε ξανά σε λίγο.'
+})
 
 useSeoMeta({
-  title: () => isNotFound.value ? 'Η σελίδα δεν βρέθηκε — Endaxi' : 'Προσωρινό πρόβλημα — Endaxi',
-  description: 'Η σελίδα δεν είναι διαθέσιμη.',
+  title: () => `${title.value} — Endaxi`,
+  description: () => description.value,
   robots: 'noindex, nofollow',
 })
 
@@ -24,15 +37,9 @@ async function returnHome() {
   <main class="flex min-h-dvh items-center justify-center px-5 py-16">
     <div class="card max-w-lg text-center">
       <p class="eyebrow">{{ statusCode }}</p>
-      <h1 class="mt-3 text-3xl font-bold">
-        {{ isNotFound ? 'Η σελίδα δεν βρέθηκε' : 'Κάτι πήγε στραβά' }}
-      </h1>
+      <h1 class="mt-3 text-3xl font-bold">{{ title }}</h1>
       <p class="mt-4 leading-relaxed" style="color: var(--color-ink-soft)">
-        {{
-          isNotFound
-            ? 'Ο σύνδεσμος ίσως έχει αλλάξει ή η σελίδα δεν υπάρχει.'
-            : 'Η υπηρεσία αντιμετώπισε προσωρινό πρόβλημα. Δοκίμασε ξανά σε λίγο.'
-        }}
+        {{ description }}
       </p>
       <button type="button" class="btn-primary mt-6" @click="returnHome">
         Επιστροφή στην αρχική

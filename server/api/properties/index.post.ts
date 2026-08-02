@@ -3,19 +3,8 @@ import { eq, count } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { properties, users, auditLog } from '../../database/schema'
 import { checkAddProperty } from '../../utils/gate'
+import { isUniqueAmaViolation } from '../../utils/db/unique-ama'
 import { getTrustedClientIp } from '../../utils/request-ip'
-
-/** Postgres unique_violation (23505) στον global index `properties_ama_idx`. */
-function isUniqueAmaViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === '23505'
-    && 'constraint_name' in error
-    && error.constraint_name === 'properties_ama_idx'
-  )
-}
 
 const bodySchema = z.object({
   ama: z.string().min(1, 'Ο ΑΜΑ είναι υποχρεωτικός').max(64),

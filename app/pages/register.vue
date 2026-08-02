@@ -20,6 +20,9 @@ const formSubmitted = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const verificationSent = ref(false)
+const termsAccepted = ref(false)
+
+const termsHasError = computed(() => formSubmitted.value && !termsAccepted.value)
 
 const emailHasError = computed(
   () => (emailTouched.value || formSubmitted.value) && !isValidEmail(email.value),
@@ -58,6 +61,11 @@ async function submit() {
 
   if (password.value !== passwordConfirmation.value) {
     error.value = 'Οι δύο κωδικοί δεν ταιριάζουν.'
+    return
+  }
+
+  if (!termsAccepted.value) {
+    error.value = 'Πρέπει να αποδεχτείς τους Όρους Χρήσης και την Πολιτική Απορρήτου.'
     return
   }
 
@@ -152,17 +160,32 @@ async function submit() {
         :submitted="formSubmitted"
       />
 
+      <div>
+        <label class="flex items-start gap-2.5 text-xs" style="color: var(--color-ink-soft)">
+          <input
+            v-model="termsAccepted"
+            type="checkbox"
+            class="mt-0.5 shrink-0"
+            required
+            :aria-invalid="termsHasError"
+            aria-describedby="terms-error"
+          />
+          <span>
+            Αποδέχομαι τους
+            <NuxtLink to="/oroi" class="underline" target="_blank">Όρους Χρήσης</NuxtLink> και την
+            <NuxtLink to="/aporrito" class="underline" target="_blank">Πολιτική Απορρήτου</NuxtLink>.
+          </span>
+        </label>
+        <p v-if="termsHasError" id="terms-error" class="error-text">
+          Πρέπει να αποδεχτείς τους Όρους Χρήσης και την Πολιτική Απορρήτου.
+        </p>
+      </div>
+
       <p v-if="error" class="notice-danger">{{ error }}</p>
 
       <button type="submit" class="btn-primary w-full" :disabled="!mounted || loading">
         {{ loading ? 'Δημιουργία…' : 'Δημιουργία λογαριασμού' }}
       </button>
-
-      <p class="text-center text-xs" style="color: var(--color-ink-muted)">
-        Συνεχίζοντας αποδέχεσαι τους
-        <NuxtLink to="/oroi" class="underline">Όρους Χρήσης</NuxtLink> και την
-        <NuxtLink to="/aporrito" class="underline">Πολιτική Απορρήτου</NuxtLink>.
-      </p>
     </form>
 
     <p class="mt-6 text-center text-sm" style="color: var(--color-ink-soft)">

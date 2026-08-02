@@ -14,19 +14,8 @@ import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { properties, takkDocuments, auditLog } from '../../database/schema'
+import { isUniqueAmaViolation } from '../../utils/db/unique-ama'
 import { getTrustedClientIp } from '../../utils/request-ip'
-
-/** Postgres unique_violation (23505) στον global index `properties_ama_idx`. */
-function isUniqueAmaViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === '23505'
-    && 'constraint_name' in error
-    && error.constraint_name === 'properties_ama_idx'
-  )
-}
 
 const bodySchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -112,10 +101,13 @@ export default defineEventHandler(async (event) => {
 
   let updated: typeof properties.$inferSelect | undefined
   try {
+    // Defense-in-depth (security audit): userId ΚΑΙ στο τελικό WHERE, όχι
+    // μόνο στο ownership SELECT από πάνω. Ένα μελλοντικό refactor που
+    // αφαιρεί/παρακάμπτει κατά λάθος το SELECT δεν θα άνοιγε IDOR εδώ.
     ;[updated] = await db
       .update(properties)
       .set(patch)
-      .where(eq(properties.id, id))
+      .where(and(eq(properties.id, id), eq(properties.userId, userId)))
       .returning()
   } catch (error) {
     if (isUniqueAmaViolation(error)) {

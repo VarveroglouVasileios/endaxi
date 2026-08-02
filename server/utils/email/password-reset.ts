@@ -18,7 +18,7 @@ export function buildPasswordResetEmail(url: string): {
   const safeUrl = escapeHtml(url)
 
   return {
-    subject: 'Επαναφορά κωδικού — Εντάξει',
+    subject: 'Επαναφορά κωδικού — Endaxi',
     html: `
       <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#1a1a18;line-height:1.6">
         <h1 style="font-size:24px;margin:0 0 16px">Επαναφορά κωδικού</h1>
@@ -35,7 +35,7 @@ export function buildPasswordResetEmail(url: string): {
       </div>
     `.trim(),
     text: [
-      'Επαναφορά κωδικού — Εντάξει',
+      'Επαναφορά κωδικού — Endaxi',
       '',
       'Λάβαμε αίτημα για αλλαγή του κωδικού πρόσβασης στον λογαριασμό σου.',
       `Όρισε νέο κωδικό: ${url}`,

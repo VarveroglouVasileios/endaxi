@@ -1,6 +1,7 @@
 import {
   checkRateLimits,
   createRateLimitIdentifier,
+  GLOBAL_RATE_LIMIT_IDENTIFIER,
   RATE_LIMIT_RULES,
   RateLimitUnavailableError,
 } from '../utils/rate-limit'
@@ -11,10 +12,18 @@ export default defineEventHandler(async (event) => {
   const rules = RATE_LIMIT_RULES.filter(rule => path.startsWith(rule.prefix))
   if (rules.length === 0) return
 
+  const perIpRules = rules.filter(rule => !rule.global)
+  const globalRules = rules.filter(rule => rule.global)
+
   let results
   try {
     const identifier = createRateLimitIdentifier(getTrustedClientIp(event) ?? 'unknown')
-    results = await checkRateLimits(rules, identifier)
+    results = [
+      ...(perIpRules.length > 0 ? await checkRateLimits(perIpRules, identifier) : []),
+      ...(globalRules.length > 0
+        ? await checkRateLimits(globalRules, GLOBAL_RATE_LIMIT_IDENTIFIER)
+        : []),
+    ]
   } catch (error) {
     if (!(error instanceof RateLimitUnavailableError)) throw error
     throw createError({

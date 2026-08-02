@@ -38,7 +38,11 @@ const trustedIpHeaders = process.env.TRUST_AZURE_PROXY === '1'
  * και αφήνουμε το TypeScript να συμπεράνει.
  */
 function createAuth() {
-  if (process.env.NODE_ENV === 'production') {
+  // Fail-closed (βλ. server/plugins/00.production-config.ts): allowlist
+  // τιμών NODE_ENV που επιτρέπεται να παρακάμψουν τον έλεγχο, όχι
+  // blocklist ενός μοναδικού «επικίνδυνου» string.
+  const skippableEnvs = new Set(['development', 'test'])
+  if (!skippableEnvs.has(process.env.NODE_ENV ?? '')) {
     if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32) {
       throw new Error('BETTER_AUTH_SECRET must contain at least 32 characters in production')
     }
@@ -63,6 +67,24 @@ function createAuth() {
 
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.NUXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+
+    // Σε local/dev το NUXT_PUBLIC_APP_URL συχνά δείχνει στο production URL.
+    // Χωρίς trustedOrigins, το Better Auth απορρίπτει Origin: http://localhost:*
+    // και μπλοκάρει sign-up/sign-in τοπικά (INVALID_ORIGIN).
+    //
+    // Fail-closed: allowlist (development/test), όχι blocklist ('production').
+    // Αλλιώς ένα NODE_ENV που δεν ισούται ρητά με 'production' (π.χ. αν
+    // ξεχαστεί σε πραγματικό deployment) θα εμπιστευόταν localhost origins
+    // σε πραγματική κίνηση — άνοιγμα CSRF/origin-trust παραθύρου.
+    trustedOrigins:
+      skippableEnvs.has(process.env.NODE_ENV ?? '')
+        ? [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:3001',
+          ]
+        : undefined,
 
     emailVerification: {
       sendVerificationEmail: async ({ user, url }) => {
@@ -125,14 +147,27 @@ function createAuth() {
     session: {
       expiresIn: 60 * 60 * 24 * 30, // 30 μέρες
       updateAge: 60 * 60 * 24, // ανανέωση κάθε μέρα
-      cookieCache: { enabled: true, maxAge: 60 * 5 },
+      /**
+       * ΒΡΕΘΗΚΕ ΣΕ SECURITY AUDIT: με cookieCache ενεργό (ήταν maxAge=5
+       * λεπτά), ένα ήδη-εκδομένο session cookie μπορούσε να συνεχίσει να
+       * αυθεντικοποιεί για έως 5 λεπτά ΜΕΤΑ από `revokeSessionsOnPasswordReset`
+       * — το Better Auth εμπιστευόταν το signed cookie χωρίς να ξαναρωτήσει
+       * τη βάση μέσα σε αυτό το παράθυρο. Ακριβώς το σενάριο όπου η
+       * επαναφορά κωδικού υποτίθεται πως «κόβει» κλεμμένα sessions αμέσως.
+       * Neon/Postgres είναι αρκετά γρήγορο ώστε το κόστος ενός DB round-trip
+       * ανά request να μην αξίζει αυτό το παράθυρο. Απενεργοποιημένο.
+       */
+      cookieCache: { enabled: false },
     },
 
     advanced: {
       // uuid αντί για το default text id — ταιριάζει με το schema μας
       database: { generateId: () => crypto.randomUUID() },
       cookiePrefix: 'endaxi',
-      useSecureCookies: process.env.NODE_ENV === 'production',
+      // Fail-closed: secure cookies ΕΝΕΡΓΑ εκτός αν είμαστε ρητά σε
+      // development/test — όχι μόνο όταν NODE_ENV ισούται ακριβώς με
+      // 'production' (βλ. σχόλιο πιο πάνω για το ίδιο μοτίβο).
+      useSecureCookies: !skippableEnvs.has(process.env.NODE_ENV ?? ''),
 
       /**
        * Χωρίς αυτό, το Better Auth προειδοποιεί σε production ότι δεν

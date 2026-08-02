@@ -8,7 +8,16 @@ export interface RateLimitRule {
   limit: number
   window: `${number} ${'ms' | 's' | 'm' | 'h' | 'd'}`
   windowMs: number
+  /**
+   * Αν true, ο κανόνας μοιράζεται ΕΝΑ κοινό identifier ('global') αντί για
+   * το per-IP identifier — λειτουργεί σαν circuit breaker ανεξάρτητο από
+   * IP. Χωρίς αυτό, ένα distributed botnet με rotating IPs παίρνει το
+   * πλήρες per-IP όριο ξανά και ξανά (κάθε IP είναι "νέος" χρήστης).
+   */
+  global?: boolean
 }
+
+export const GLOBAL_RATE_LIMIT_IDENTIFIER = 'global'
 
 export interface RateLimitResult {
   rule: RateLimitRule
@@ -71,18 +80,40 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     windowMs: 60_000,
   },
   {
+    // ΣΦΙΞΙΜΟ (security audit, Αύγ 2026): 8→5 — το /api/help/chat δεν
+    // απαιτεί login (Origin header ΔΕΝ είναι authentication, ένα script
+    // εκτός browser το πλαστογραφεί εύκολα). Χαμηλότερο per-minute όριο
+    // περιορίζει την ταχύτητα burst ενός μεμονωμένου attacker.
     id: 'help-chat-minute',
     prefix: '/api/help/chat',
-    limit: 8,
+    limit: 5,
     window: '1 m',
     windowMs: 60_000,
   },
   {
+    // ΣΦΙΞΙΜΟ: 40→15 ανά IP/μέρα — βασικός μοχλός άμυνας απέναντι σε ένα
+    // μεμονωμένο IP που προσπαθεί να καταναλώσει Groq quota.
     id: 'help-chat-day',
     prefix: '/api/help/chat',
-    limit: 40,
+    limit: 15,
     window: '1 d',
     windowMs: 86_400_000,
+  },
+  // Circuit breaker ανεξάρτητο από IP: ένα distributed botnet με rotating
+  // IPs παρακάμπτει το per-IP όριο παραπάνω γιατί κάθε IP ξεκινά "καθαρό".
+  // Αυτό μπλοκάρει ΟΛΗ την κίνηση προς το AI chat όταν ξεπεραστεί ένα
+  // λογικό ημερήσιο budget, ανεξάρτητα από το πόσες διαφορετικές IPs
+  // στέλνουν τα requests. Ρυθμίσιμο via env για να μη μπλοκάρει πραγματική
+  // αύξηση χρηστών χωρίς παρέμβαση.
+  // ΣΦΙΞΙΜΟ: default 300→150 — μειώνει το χειρότερο σενάριο ημερήσιου
+  // κόστους από distributed abuse στο μισό, παραμένει ρυθμίσιμο.
+  {
+    id: 'help-chat-global-day',
+    prefix: '/api/help/chat',
+    limit: Number(process.env.HELP_CHAT_DAILY_BUDGET ?? 150),
+    window: '1 d',
+    windowMs: 86_400_000,
+    global: true,
   },
   // Κάθε λήψη παράγει ένα signed R2 URL — χωρίς όριο ένας λογαριασμός θα
   // μπορούσε να ζητά χιλιάδες signed URLs σε λίγα λεπτά.
@@ -90,6 +121,50 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     id: 'documents-download-minute',
     prefix: '/api/documents',
     limit: 60,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  // ΝΕΟ (security audit): /api/properties, /api/stays, /api/me,
+  // /api/onboarding ήταν εντελώς εκτός rate-limit — ένας συνδεδεμένος
+  // χρήστης (ή κλεμμένο session) μπορούσε να κάνει απεριόριστα PATCH/POST.
+  // Γενικό, αρκετά γενναιόδωρο όριο ώστε να μην ενοχλεί κανονική χρήση
+  // (dashboard polling, onboarding flow), αλλά να κόβει scripted abuse.
+  {
+    id: 'authenticated-api-minute',
+    prefix: '/api/properties',
+    limit: 60,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'stays-api-minute',
+    prefix: '/api/stays',
+    limit: 60,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'me-api-minute',
+    prefix: '/api/me',
+    limit: 30,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'onboarding-api-minute',
+    prefix: '/api/onboarding',
+    limit: 20,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  // ΝΕΟ: /api/health έτρεχε `select 1` στη Neon σε ΚΑΘΕ αίτημα χωρίς κανένα
+  // όριο — φθηνό μεμονωμένα, αλλά φθηνός ενισχυτής (amplifier) για κάποιον
+  // που θέλει να πιέσει τη βάση. Γενναιόδωρο όριο ώστε να μην ενοχλεί
+  // health checks / load balancer probes (συνήθως κάθε 5-30 δευτ.).
+  {
+    id: 'health-minute',
+    prefix: '/api/health',
+    limit: 30,
     window: '1 m',
     windowMs: 60_000,
   },

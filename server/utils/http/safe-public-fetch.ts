@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises'
 import type { LookupFunction } from 'node:net'
-import * as ipaddr from 'ipaddr.js'
+import ipaddr from 'ipaddr.js'
 import { Agent, fetch } from 'undici'
 
 const ALLOWED_PROTOCOL = 'https:'
@@ -176,10 +176,31 @@ export async function fetchPublicText(
     const [pinned] = await resolvePublicAddresses(url.hostname)
     if (!pinned) throw new PublicFetchError('unreachable', 'Δεν βρέθηκε δημόσια διεύθυνση.')
 
-    const pinnedLookup: LookupFunction = (_hostname, _options, callback) => {
-      callback(null, pinned.address, pinned.family)
+    /**
+     * ΒΡΕΘΗΚΕ ΜΕ ΠΡΑΓΜΑΤΙΚΟ live network test (όχι mock): από Node 20+ το
+     * `net.connect`/`tls.connect` έχει `autoSelectFamily` ενεργό από
+     * προεπιλογή (Happy Eyeballs, RFC 8305) — καλεί τη lookup function με
+     * `options.all === true` και περιμένει `callback(err, addresses[])`
+     * (πίνακα από `{address, family}`), ΟΧΙ το παλιό `callback(err, address,
+     * family)`. Χωρίς αυτό το κλάδο, ΚΑΘΕ πραγματική κλήση fetch μέσα από
+     * αυτή τη dispatcher απέτυχε με `ERR_INVALID_IP_ADDRESS: Invalid IP
+     * address: undefined` — δηλαδή το SSRF-safe iCal fetch θα ήταν
+     * ΠΛΗΡΩΣ σπασμένο σε Node ≥20 (το package.json απαιτεί ">=22"), άρα σε
+     * ΚΑΘΕ πραγματικό host που θα προσπαθούσε να συνδέσει ημερολόγιο.
+     */
+    const pinnedLookup: LookupFunction = (_hostname, lookupOptions, callback) => {
+      const wantsAll
+        = typeof lookupOptions === 'object' && lookupOptions !== null && 'all' in lookupOptions
+          ? Boolean((lookupOptions as { all?: boolean }).all)
+          : false
+
+      if (wantsAll) {
+        callback(null, [{ address: pinned.address, family: pinned.family }])
+      } else {
+        callback(null, pinned.address, pinned.family)
+      }
     }
-    const dispatcher = new Agent({ connect: { lookup: pinnedLookup } })
+    const dispatcher = new Agent({ connect: { lookup: pinnedLookup, autoSelectFamily: false } })
 
     try {
       const response = await fetch(url, {

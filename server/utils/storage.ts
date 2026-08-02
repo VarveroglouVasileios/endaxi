@@ -102,12 +102,19 @@ export function takkDocumentKey(params: {
 
 /** Ανεβάζει PDF. Επιστρέφει το κλειδί. */
 export async function putPdf(key: string, body: Buffer): Promise<string> {
+  /**
+   * ΒΡΕΘΗΚΕ ΜΕ ΠΡΑΓΜΑΤΙΚΟ live upload test: το `fetch()` του Fetch
+   * standard ΑΠΑΓΟΡΕΥΕΙ να θέσεις χειροκίνητα το header `Content-Length`
+   * (είναι "forbidden request header" — υπολογίζεται αυτόματα από το
+   * σώμα). Παλιότερες εκδόσεις undici το αγνοούσαν σιωπηλά· νεότερες
+   * (>=8) το απορρίπτουν με `InvalidArgumentError: invalid content-length
+   * header`, σπάζοντας ΚΑΘΕ πραγματικό upload στο R2.
+   */
   const res = await client().fetch(endpoint(key), {
     method: 'PUT',
     body: new Uint8Array(body),
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Length': String(body.length),
     },
   })
 

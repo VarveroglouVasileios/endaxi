@@ -5,7 +5,7 @@
  * δεδομένα. Απλώς σταματάμε τον συγχρονισμό.
  */
 
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { icalSources, properties, auditLog } from '../../database/schema'
 import { getTrustedClientIp } from '../../utils/request-ip'
@@ -28,11 +28,22 @@ export default defineEventHandler(async (event) => {
 
   if (!row) throw createError({ statusCode: 404, message: 'Δεν βρέθηκε' })
 
-  // Απενεργοποίηση, όχι διαγραφή — κρατάμε το ιστορικό
+  // Απενεργοποίηση, όχι διαγραφή — κρατάμε το ιστορικό.
+  // Defense-in-depth (security audit): η ownership επαληθεύεται ΞΑΝΑ μέσα
+  // στο ίδιο το WHERE (subquery στα properties του χρήστη), όχι μόνο στο
+  // SELECT από πάνω — ένα μελλοντικό refactor δεν θα άνοιγε IDOR εδώ.
   await db
     .update(icalSources)
     .set({ isActive: false })
-    .where(eq(icalSources.id, id))
+    .where(
+      and(
+        eq(icalSources.id, id),
+        inArray(
+          icalSources.propertyId,
+          db.select({ id: properties.id }).from(properties).where(eq(properties.userId, userId)),
+        ),
+      ),
+    )
 
   await db.insert(auditLog).values({
     userId,

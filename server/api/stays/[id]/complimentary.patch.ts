@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod'
-import { eq, and, count } from 'drizzle-orm'
+import { eq, and, count, inArray } from 'drizzle-orm'
 import { useDatabase } from '../../../database/client'
 import { stays, properties, takkDocuments, auditLog } from '../../../database/schema'
 import { getTrustedClientIp } from '../../../utils/request-ip'
@@ -62,6 +62,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Defense-in-depth (security audit): ownership ξανά μέσα στο WHERE
+  // (subquery στα properties του χρήστη), όχι μόνο στο SELECT από πάνω.
   await db
     .update(stays)
     .set({
@@ -69,7 +71,15 @@ export default defineEventHandler(async (event) => {
       complimentaryNote: body.isComplimentary ? (body.note ?? null) : null,
       updatedAt: new Date(),
     })
-    .where(eq(stays.id, id))
+    .where(
+      and(
+        eq(stays.id, id),
+        inArray(
+          stays.propertyId,
+          db.select({ id: properties.id }).from(properties).where(eq(properties.userId, userId)),
+        ),
+      ),
+    )
 
   await db.insert(auditLog).values({
     userId,

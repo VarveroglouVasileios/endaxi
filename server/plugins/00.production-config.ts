@@ -17,7 +17,20 @@ const REQUIRED_PRODUCTION_ENV = [
 ] as const
 
 export default defineNitroPlugin(() => {
-  if (process.env.NODE_ENV !== 'production') return
+  /**
+   * ΒΡΕΘΗΚΕ ΣΕ SECURITY AUDIT: fail-OPEN pattern. Το παλιό `!== 'production'`
+   * παρέκαμπτε ΟΛΟΥΣ τους ελέγχους για ΟΠΟΙΑΔΗΠΟΤΕ τιμή του NODE_ENV εκτός
+   * από ακριβώς 'production' — δηλαδή undefined, typo, 'staging', άδειο
+   * string, ή ένα hosting platform που απλά ξέχασε να το ορίσει, όλα
+   * σιωπηλά παρέκαμπταν την επαλήθευση secrets/HTTPS/proxy-trust σε ένα
+   * deployment που ΣΤΗΝ ΠΡΑΞΗ σερβίρει πραγματική κίνηση.
+   *
+   * Fix: allowlist αντί για blocklist. Μόνο οι ρητά «ασφαλείς για
+   * παράλειψη» τιμές (development/test) παρακάμπτουν τον έλεγχο — οτιδήποτε
+   * άλλο (συμπεριλαμβανομένου του undefined) τον ενεργοποιεί by default.
+   */
+  const skippableEnvs = new Set(['development', 'test'])
+  if (skippableEnvs.has(process.env.NODE_ENV ?? '')) return
 
   const missing = REQUIRED_PRODUCTION_ENV.filter(name => !process.env[name])
   if (missing.length > 0) {
