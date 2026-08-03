@@ -40,75 +40,93 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'Λείπει το id' })
 
-  const [property] = await db
-    .select()
-    .from(properties)
-    .where(and(eq(properties.id, id), eq(properties.userId, userId)))
-    .limit(1)
-
-  if (!property) throw createError({ statusCode: 404, message: 'Δεν βρέθηκε' })
-
   const body = await readValidatedBody(event, bodySchema.parse)
 
-  // Έχει εκδοθεί παραστατικό; Τότε κλειδώνουν ΑΜΑ και σειρά.
-  const [issued] = await db
-    .select({ n: count() })
-    .from(takkDocuments)
-    .where(eq(takkDocuments.propertyId, id))
-
-  const hasIssued = (issued?.n ?? 0) > 0
-
-  if (hasIssued) {
-    if (body.ama && body.ama !== property.ama) {
-      throw createError({
-        statusCode: 409,
-        statusMessage: 'AMA_LOCKED',
-        data: {
-          message:
-            'Ο ΑΜΑ δεν αλλάζει αφού έχουν εκδοθεί παραστατικά. Αν άλλαξε ' +
-            'ο ΑΜΑ του ακινήτου, πρόσθεσέ το ως νέο ακίνητο.',
-        },
-      })
-    }
-    if (body.documentSeries && body.documentSeries !== property.documentSeries) {
-      throw createError({
-        statusCode: 409,
-        statusMessage: 'SERIES_LOCKED',
-        data: {
-          message:
-            'Η σειρά παραστατικών δεν αλλάζει αφού έχει ξεκινήσει η αρίθμηση — ' +
-            'θα έσπαγε τη συνέχειά της.',
-        },
-      })
-    }
-  }
-
-  const patch: Record<string, unknown> = { updatedAt: new Date() }
-  for (const k of [
-    'name',
-    'category',
-    'addressLine',
-    'city',
-    'postalCode',
-    'areaSqm',
-  ] as const) {
-    if (body[k] !== undefined) patch[k] = body[k]
-  }
-  if (!hasIssued) {
-    if (body.ama !== undefined) patch.ama = body.ama.trim()
-    if (body.documentSeries !== undefined) patch.documentSeries = body.documentSeries
-  }
-
   let updated: typeof properties.$inferSelect | undefined
+  let hasIssued = false
+
   try {
-    // Defense-in-depth (security audit): userId ΚΑΙ στο τελικό WHERE, όχι
-    // μόνο στο ownership SELECT από πάνω. Ένα μελλοντικό refactor που
-    // αφαιρεί/παρακάμπτει κατά λάθος το SELECT δεν θα άνοιγε IDOR εδώ.
-    ;[updated] = await db
-      .update(properties)
-      .set(patch)
-      .where(and(eq(properties.id, id), eq(properties.userId, userId)))
-      .returning()
+    /**
+     * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT (race condition / TOCTOU): ο
+     * παλιός κώδικας έκανε "SELECT έχει εκδοθεί;" (που κλειδώνει ΑΜΑ/σειρά)
+     * και το UPDATE ΕΚΤΟΣ transaction. Ταυτόχρονη έκδοση παραστατικού
+     * ανάμεσα στα δύο θα επέτρεπε αλλαγή "κλειδωμένου" ΑΜΑ/σειράς ΜΕΤΑ την
+     * έκδοση — σπάει τη συνέχεια αρίθμησης που ο ίδιος ο κώδικας δηλώνει
+     * ρητά ότι προστατεύει.
+     *
+     * Fix: κλειδώνουμε τη γραμμή του ακινήτου (SELECT ... FOR UPDATE) πριν
+     * τον έλεγχο. Το issueTakkDocuments() (server/utils/takk/numbering.ts)
+     * κλειδώνει την ΙΔΙΑ γραμμή πριν διαβάσει το ΑΜΑ/σειρά για το νέο
+     * παραστατικό — τα δύο transactions σειριοποιούνται σωστά.
+     */
+    updated = await db.transaction(async (tx) => {
+      const [property] = await tx
+        .select()
+        .from(properties)
+        .where(and(eq(properties.id, id), eq(properties.userId, userId)))
+        .for('update')
+
+      if (!property) throw createError({ statusCode: 404, message: 'Δεν βρέθηκε' })
+
+      // Έχει εκδοθεί παραστατικό; Τότε κλειδώνουν ΑΜΑ και σειρά.
+      const [issued] = await tx
+        .select({ n: count() })
+        .from(takkDocuments)
+        .where(eq(takkDocuments.propertyId, id))
+
+      hasIssued = (issued?.n ?? 0) > 0
+
+      if (hasIssued) {
+        if (body.ama && body.ama !== property.ama) {
+          throw createError({
+            statusCode: 409,
+            statusMessage: 'AMA_LOCKED',
+            data: {
+              message:
+                'Ο ΑΜΑ δεν αλλάζει αφού έχουν εκδοθεί παραστατικά. Αν άλλαξε ' +
+                'ο ΑΜΑ του ακινήτου, πρόσθεσέ το ως νέο ακίνητο.',
+            },
+          })
+        }
+        if (body.documentSeries && body.documentSeries !== property.documentSeries) {
+          throw createError({
+            statusCode: 409,
+            statusMessage: 'SERIES_LOCKED',
+            data: {
+              message:
+                'Η σειρά παραστατικών δεν αλλάζει αφού έχει ξεκινήσει η αρίθμηση — ' +
+                'θα έσπαγε τη συνέχειά της.',
+            },
+          })
+        }
+      }
+
+      const patch: Record<string, unknown> = { updatedAt: new Date() }
+      for (const k of [
+        'name',
+        'category',
+        'addressLine',
+        'city',
+        'postalCode',
+        'areaSqm',
+      ] as const) {
+        if (body[k] !== undefined) patch[k] = body[k]
+      }
+      if (!hasIssued) {
+        if (body.ama !== undefined) patch.ama = body.ama.trim()
+        if (body.documentSeries !== undefined) patch.documentSeries = body.documentSeries
+      }
+
+      // Defense-in-depth (προηγούμενο security audit): userId ΚΑΙ στο
+      // τελικό WHERE, όχι μόνο στο ownership SELECT από πάνω.
+      const [row] = await tx
+        .update(properties)
+        .set(patch)
+        .where(and(eq(properties.id, id), eq(properties.userId, userId)))
+        .returning()
+
+      return row
+    })
   } catch (error) {
     if (isUniqueAmaViolation(error)) {
       throw createError({

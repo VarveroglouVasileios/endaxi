@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
 import { icalSources, properties, auditLog } from '../../database/schema'
 import { validateIcalUrl } from '../../utils/ical/validate'
@@ -56,43 +56,61 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // ── Υπάρχει ήδη; ──
-  const [existing] = await db
-    .select()
-    .from(icalSources)
-    .where(
-      and(eq(icalSources.propertyId, property.id), eq(icalSources.url, body.url.trim())),
-    )
-    .limit(1)
+  /**
+   * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT (race condition): το παλιό "υπάρχει
+   * ήδη;" SELECT + INSERT δεν ήταν ατομικά, και δεν υπάρχει unique
+   * constraint στη βάση για (propertyId, url) — δύο ταυτόχρονα POST με το
+   * ίδιο URL (π.χ. διπλό-κλικ) μπορούσαν να δημιουργήσουν δύο ενεργές
+   * πηγές για το ίδιο ακίνητο.
+   *
+   * Fix: Postgres advisory lock ανά ακίνητο (pg_advisory_xact_lock) μέσα
+   * σε transaction — σειριοποιεί ταυτόχρονα αιτήματα για το ΙΔΙΟ property
+   * χωρίς migration/schema change. Το lock λύνεται αυτόματα στο commit/
+   * rollback του transaction.
+   */
+  const created = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${property.id}))`)
 
-  if (existing) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: 'ALREADY_CONNECTED',
-      data: { message: 'Αυτό το ημερολόγιο είναι ήδη συνδεδεμένο.' },
-    })
-  }
+    // ── Υπάρχει ήδη; ── (ΜΕΣΑ στο κλείδωμα, όχι πριν)
+    const [existing] = await tx
+      .select()
+      .from(icalSources)
+      .where(
+        and(eq(icalSources.propertyId, property.id), eq(icalSources.url, body.url.trim())),
+      )
+      .limit(1)
 
-  const [created] = await db
-    .insert(icalSources)
-    .values({
-      propertyId: property.id,
-      url: body.url.trim(),
-      source: PLATFORM_TO_SOURCE[validation.platform],
-      label: body.label ?? validation.platform,
-      isActive: true,
-    })
-    .returning({
-      id: icalSources.id,
-      propertyId: icalSources.propertyId,
-      source: icalSources.source,
-      label: icalSources.label,
-      isActive: icalSources.isActive,
-      lastSyncedAt: icalSources.lastSyncedAt,
-      lastSyncStatus: icalSources.lastSyncStatus,
-      consecutiveFailures: icalSources.consecutiveFailures,
-      createdAt: icalSources.createdAt,
-    })
+    if (existing) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'ALREADY_CONNECTED',
+        data: { message: 'Αυτό το ημερολόγιο είναι ήδη συνδεδεμένο.' },
+      })
+    }
+
+    const [row] = await tx
+      .insert(icalSources)
+      .values({
+        propertyId: property.id,
+        url: body.url.trim(),
+        source: PLATFORM_TO_SOURCE[validation.platform],
+        label: body.label ?? validation.platform,
+        isActive: true,
+      })
+      .returning({
+        id: icalSources.id,
+        propertyId: icalSources.propertyId,
+        source: icalSources.source,
+        label: icalSources.label,
+        isActive: icalSources.isActive,
+        lastSyncedAt: icalSources.lastSyncedAt,
+        lastSyncStatus: icalSources.lastSyncStatus,
+        consecutiveFailures: icalSources.consecutiveFailures,
+        createdAt: icalSources.createdAt,
+      })
+
+    return row
+  })
 
   await db.insert(auditLog).values({
     userId,

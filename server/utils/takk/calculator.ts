@@ -101,6 +101,22 @@ export function addDays(isoDate: string, days: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
+/**
+ * Ανώτατο όριο ασφαλείας για διανυκτερεύσεις μιας διαμονής.
+ *
+ * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT: χωρίς αυτό, ένα iCal event με
+ * αλλοιωμένη/ακραία ημερομηνία αναχώρησης (π.χ. DTEND πολλά χρόνια στο
+ * μέλλον, τυχαία ή κακόβουλα) θα έκανε το `calculateTakk()` να χτίσει
+ * πίνακα εκατομμυρίων εγγραφών (μία ανά νύχτα) — resource exhaustion στο
+ * Inngest step, και ρίσκο overflow στο `total_amount_cents` (Postgres
+ * integer, 4 bytes) όταν το ποσό αθροίζεται σε τόσο μεγάλο εύρος.
+ *
+ * 366 μέρες καλύπτει γενναιόδωρα κάθε πραγματική βραχυχρόνια μίσθωση
+ * (νομικά ούτως ή άλλως ορίζεται ως τέτοια μόνο για σύντομες διαμονές) —
+ * δεν μπλοκάρει καμία νόμιμη κράτηση, μόνο αλλοιωμένα/κακόβουλα δεδομένα.
+ */
+export const MAX_STAY_NIGHTS = 366
+
 /** Διανυκτερεύσεις μεταξύ άφιξης και αναχώρησης. */
 export function countNights(checkIn: string, checkOut: string): number {
   assertIsoDate(checkIn, 'checkIn')
@@ -112,6 +128,12 @@ export function countNights(checkIn: string, checkOut: string): number {
 
   if (nights < 0) {
     throw new Error('Η αναχώρηση δεν μπορεί να προηγείται της άφιξης')
+  }
+  if (nights > MAX_STAY_NIGHTS) {
+    throw new Error(
+      `Η διαμονή διαρκεί ${nights} διανυκτερεύσεις — υπερβαίνει το όριο ` +
+      `ασφαλείας των ${MAX_STAY_NIGHTS}. Πιθανό αλλοιωμένο ή άκυρο iCal event.`,
+    )
   }
   return nights
 }

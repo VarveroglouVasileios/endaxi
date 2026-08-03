@@ -157,7 +157,23 @@ export const syncIcalSource = inngest.createFunction(
       for (const candidate of diff.toReview) reviewRequired.add(candidate.existingId)
 
       for (const ev of diff.toCreate) {
-        const nights = countNights(ev.checkIn, ev.checkOut)
+        // ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT: countNights() πλέον απορρίπτει
+        // ακραίες διάρκειες (βλ. MAX_STAY_NIGHTS, calculator.ts) — ένα ΕΝΑ
+        // αλλοιωμένο event στο feed δεν πρέπει να ρίχνει ΟΛΟ αυτό το step
+        // (και άρα να μπλοκάρει τις υπόλοιπες, έγκυρες κρατήσεις). Παράλειψε
+        // μόνο το προβληματικό event.
+        let nights: number
+        try {
+          nights = countNights(ev.checkIn, ev.checkOut)
+        } catch (err) {
+          console.error('[sync-ical]', {
+            status: 'invalid_event_skipped',
+            icalSourceId: source.id,
+            uid: ev.uid,
+            errorType: err instanceof Error ? err.message : 'UnknownError',
+          })
+          continue
+        }
         if (nights === 0) continue // same-day, δεν παράγει ΤΑΚΚ
 
         const [row] = await db
@@ -201,7 +217,19 @@ export const syncIcalSource = inngest.createFunction(
           continue
         }
 
-        const nights = countNights(u.event.checkIn, u.event.checkOut)
+        let nights: number
+        try {
+          nights = countNights(u.event.checkIn, u.event.checkOut)
+        } catch (err) {
+          console.error('[sync-ical]', {
+            status: 'invalid_event_update_skipped',
+            icalSourceId: source.id,
+            existingId: u.existingId,
+            errorType: err instanceof Error ? err.message : 'UnknownError',
+          })
+          reviewRequired.add(u.existingId)
+          continue
+        }
         await db
           .update(stays)
           .set({

@@ -179,6 +179,29 @@ export const deliverTakkDocument = inngest.createFunction(
         return { sent: false, reason: 'email_not_configured' }
       }
 
+      /**
+       * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT: αν αυτό το step retry-άρει αφού
+       * το sendEmail() ΗΔΗ πέτυχε αλλά το επόμενο DB update απέτυχε (π.χ.
+       * στιγμιαίο πρόβλημα σύνδεσης), το Inngest ξανατρέχει ΟΛΟΚΛΗΡΟ το
+       * βήμα — στέλνοντας το ίδιο φορολογικό παραστατικό στον επισκέπτη
+       * ΔΕΥΤΕΡΗ φορά. Το `doc` εδώ είναι στιγμιότυπο από το step
+       * 'load-document' (το Inngest ΔΕΝ το ξανατρέχει σε retry), άρα δεν
+       * βλέπει αλλαγές που ενδεχομένως έγιναν ΜΕΣΑ σε προηγούμενη,
+       * αποτυχημένη προσπάθεια αυτού του ίδιου step.
+       *
+       * Fix: φρέσκο SELECT του sentToGuestAt απευθείας από τη βάση, ΠΡΙΝ
+       * την αποστολή — αν έχει ήδη τιμή, το email έχει ήδη σταλεί.
+       */
+      const [fresh] = await db
+        .select({ sentToGuestAt: takkDocuments.sentToGuestAt })
+        .from(takkDocuments)
+        .where(eq(takkDocuments.id, doc.id))
+        .limit(1)
+
+      if (fresh?.sentToGuestAt) {
+        return { sent: false, reason: 'already_sent' }
+      }
+
       // Το email του επισκέπτη δεν έρχεται από iCal.
       // Θα γεμίσει από το inbound-email module (reconciliation).
       const [stay] = doc.stayId

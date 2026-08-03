@@ -23,6 +23,7 @@ import {
   checkRateLimits,
   createRateLimitIdentifier,
   EMAIL_VERIFICATION_EMAIL_RULE,
+  SIGN_IN_EMAIL_RULE,
 } from './rate-limit'
 import { TRUSTED_CLIENT_IP_HEADER } from './request-ip'
 
@@ -114,6 +115,31 @@ function createAuth() {
 
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === '/sign-in/email') {
+          /**
+           * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT: το per-IP rate limit στο
+           * sign-in (server/middleware/01.rate-limit.ts) δεν προστατεύει
+           * ένα ΣΥΓΚΕΚΡΙΜΕΝΟ email από distributed brute force — κάθε νέο
+           * IP παίρνει δικό του καθαρό μπάτζετ. Προσθέτουμε εδώ ΞΕΧΩΡΙΣΤΟ
+           * per-account throttle, ίδιο μοτίβο με το email-verification
+           * παρακάτω (identifier βασισμένο στο email, όχι στο IP).
+           */
+          const email = typeof ctx.body?.email === 'string' ? ctx.body.email.trim().toLowerCase() : ''
+          if (email) {
+            const [limit] = await checkRateLimits(
+              [SIGN_IN_EMAIL_RULE],
+              createRateLimitIdentifier(`sign-in-email:${email}`),
+            )
+            if (!limit?.success) {
+              throw new APIError('TOO_MANY_REQUESTS', {
+                message:
+                  'Πάρα πολλές προσπάθειες σύνδεσης για αυτόν τον λογαριασμό. ' +
+                  'Δοκίμασε ξανά αργότερα.',
+              })
+            }
+          }
+        }
+
         if (ctx.path === '/sign-up/email') {
           const email = typeof ctx.body?.email === 'string' ? ctx.body.email : ''
           const password = typeof ctx.body?.password === 'string' ? ctx.body.password : ''

@@ -39,47 +39,70 @@ export default defineEventHandler(async (event) => {
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
-  // Έχει ήδη εκδοθεί παραστατικό;
-  const [issued] = await db
-    .select({ n: count() })
-    .from(takkDocuments)
-    .where(
-      and(
-        eq(takkDocuments.stayId, id),
-        eq(takkDocuments.documentType, 'takk_receipt'),
-      ),
-    )
+  /**
+   * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT (race condition / TOCTOU): ο παλιός
+   * κώδικας έκανε "SELECT έχει εκδοθεί;" και μετά το UPDATE ΕΚΤΟΣ transaction.
+   * Αν ένα Inngest job εξέδιδε παραστατικό ΑΝΑΜΕΣΑ στα δύο βήματα, το stay
+   * μπορούσε να σημανθεί "δωρεάν" ενώ υπήρχε ήδη έγκυρο παραστατικό —
+   * ασυνεπής φορολογική κατάσταση.
+   *
+   * Fix: κλειδώνουμε τη ΓΡΑΜΜΗ του stay (SELECT ... FOR UPDATE) πριν τον
+   * έλεγχο. Το issueTakkDocuments() (server/utils/takk/numbering.ts)
+   * κλειδώνει την ΙΔΙΑ γραμμή πριν αποφασίσει τι θα εκδώσει — τα δύο
+   * transactions σειριοποιούνται σωστά από την ίδια την Postgres.
+   */
+  await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select({ id: stays.id })
+      .from(stays)
+      .where(eq(stays.id, id))
+      .for('update')
 
-  if ((issued?.n ?? 0) > 0) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: 'ALREADY_ISSUED',
-      data: {
-        message:
-          'Έχει ήδη εκδοθεί παραστατικό για αυτή τη διαμονή. Η σήμανση ως ' +
-          'δωρεάν δεν το ακυρώνει — χρειάζεται έκδοση αντιλογιστικού.',
-      },
-    })
-  }
+    if (!locked) throw createError({ statusCode: 404, message: 'Δεν βρέθηκε η διαμονή' })
 
-  // Defense-in-depth (security audit): ownership ξανά μέσα στο WHERE
-  // (subquery στα properties του χρήστη), όχι μόνο στο SELECT από πάνω.
-  await db
-    .update(stays)
-    .set({
-      isComplimentary: body.isComplimentary,
-      complimentaryNote: body.isComplimentary ? (body.note ?? null) : null,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(stays.id, id),
-        inArray(
-          stays.propertyId,
-          db.select({ id: properties.id }).from(properties).where(eq(properties.userId, userId)),
+    // Έχει ήδη εκδοθεί παραστατικό; (ΜΕΣΑ στο κλείδωμα, όχι πριν)
+    const [issued] = await tx
+      .select({ n: count() })
+      .from(takkDocuments)
+      .where(
+        and(
+          eq(takkDocuments.stayId, id),
+          eq(takkDocuments.documentType, 'takk_receipt'),
         ),
-      ),
-    )
+      )
+
+    if ((issued?.n ?? 0) > 0) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'ALREADY_ISSUED',
+        data: {
+          message:
+            'Έχει ήδη εκδοθεί παραστατικό για αυτή τη διαμονή. Η σήμανση ως ' +
+            'δωρεάν δεν το ακυρώνει — χρειάζεται έκδοση αντιλογιστικού.',
+        },
+      })
+    }
+
+    // Defense-in-depth (προηγούμενο security audit): ownership ξανά μέσα
+    // στο WHERE (subquery στα properties του χρήστη), όχι μόνο στο SELECT
+    // από πάνω.
+    await tx
+      .update(stays)
+      .set({
+        isComplimentary: body.isComplimentary,
+        complimentaryNote: body.isComplimentary ? (body.note ?? null) : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(stays.id, id),
+          inArray(
+            stays.propertyId,
+            tx.select({ id: properties.id }).from(properties).where(eq(properties.userId, userId)),
+          ),
+        ),
+      )
+  })
 
   await db.insert(auditLog).values({
     userId,

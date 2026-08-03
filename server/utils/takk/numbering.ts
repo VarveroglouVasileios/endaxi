@@ -149,7 +149,34 @@ async function issueTakkDocumentsInner(
   const { stayId } = params
 
   return await db.transaction(async (tx) => {
-    // ── 1. Φόρτωση διαμονής + ακινήτου + ιδιοκτήτη ──
+    /**
+     * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT (race condition / TOCTOU): κλειδώνουμε
+     * ΠΡΩΤΑ τη γραμμή του stay και μετά του property, ΠΡΙΝ διαβάσουμε
+     * οτιδήποτε εξαρτάται από την "τρέχουσα" κατάστασή τους (isComplimentary,
+     * ama, documentSeries). Δύο άλλα endpoints κλειδώνουν τις ΙΔΙΕΣ γραμμές
+     * πριν αποφασίσουν τι επιτρέπεται:
+     *  - server/api/stays/[id]/complimentary.patch.ts (κλειδώνει stay)
+     *  - server/api/properties/[id].patch.ts (κλειδώνει property)
+     * Χωρίς αυτό, μια ταυτόχρονη σήμανση "δωρεάν" ή αλλαγή ΑΜΑ/σειράς
+     * ανάμεσα στο check και το commit της έκδοσης θα άφηνε ασυνεπή
+     * κατάσταση. Σειρά κλειδώματος ΠΑΝΤΑ stay→property, ίδια παντού, ώστε
+     * να μην υπάρχει πιθανότητα deadlock μεταξύ των δύο transactions.
+     */
+    const [stayLock] = await tx
+      .select({ id: stays.id, propertyId: stays.propertyId })
+      .from(stays)
+      .where(eq(stays.id, stayId))
+      .for('update')
+
+    if (!stayLock) throw new NumberingError(`Δεν βρέθηκε διαμονή ${stayId}`)
+
+    await tx
+      .select({ id: properties.id })
+      .from(properties)
+      .where(eq(properties.id, stayLock.propertyId))
+      .for('update')
+
+    // ── 1. Φόρτωση διαμονής + ακινήτου + ιδιοκτήτη ── (ΜΕΤΑ το κλείδωμα)
     const [row] = await tx
       .select({
         stay: stays,

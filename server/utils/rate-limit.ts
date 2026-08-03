@@ -168,7 +168,74 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     window: '1 m',
     windowMs: 60_000,
   },
+  // ΝΕΟ (δικός μου security audit): αυτά τα Better Auth endpoints δεν
+  // καλύπτονταν από το δικό μας distributed (Upstash) rate-limit — έπεφταν
+  // πίσω στο built-in in-memory limiter του Better Auth, που είναι
+  // per-instance και άρα παρακάμψιμο σε multi-instance deployment (Azure
+  // App Service autoscale). /api/auth/reset-password είναι η ΚΑΤΑΝΑΛΩΣΗ
+  // του token (διαφορετικό endpoint από το /request-password-reset).
+  {
+    id: 'reset-password-minute',
+    prefix: '/api/auth/reset-password',
+    limit: 5,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'verify-email-minute',
+    prefix: '/api/auth/verify-email',
+    limit: 10,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'change-password-minute',
+    prefix: '/api/auth/change-password',
+    limit: 10,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'change-email-minute',
+    prefix: '/api/auth/change-email',
+    limit: 10,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  // Πρόθεμα '/api/auth/revoke-session' καλύπτει ΚΑΙ το /revoke-session
+  // (μία session) ΚΑΙ το /revoke-sessions (όλες) — σκόπιμο, όχι ατύχημα.
+  {
+    id: 'revoke-session-minute',
+    prefix: '/api/auth/revoke-session',
+    limit: 10,
+    window: '1 m',
+    windowMs: 60_000,
+  },
+  {
+    id: 'delete-user-minute',
+    prefix: '/api/auth/delete-user',
+    limit: 5,
+    window: '1 m',
+    windowMs: 60_000,
+  },
 ] as const
+
+/**
+ * Per-account (όχι per-IP) throttle στο sign-in — δικός μου security audit:
+ * το per-IP `sign-in-minute` παραπάνω δίνει σε ΚΑΘΕ IP δικό του "καθαρό"
+ * μπάτζετ 10 προσπαθειών/λεπτό. Ένας distributed attacker (πολλά IPs) που
+ * στοχεύει ΕΝΑ email έχει ουσιαστικά απεριόριστο συνολικό budget χωρίς
+ * αυτό. Εφαρμόζεται χειροκίνητα στο server/utils/auth.ts (hooks.before),
+ * όχι μέσω του γενικού middleware, γιατί χρειάζεται πρόσβαση στο email
+ * του request body.
+ */
+export const SIGN_IN_EMAIL_RULE: RateLimitRule = {
+  id: 'sign-in-address-window',
+  prefix: '/api/auth/sign-in',
+  limit: 15,
+  window: '15 m',
+  windowMs: 900_000,
+}
 
 export const EMAIL_VERIFICATION_EMAIL_RULE: RateLimitRule = {
   id: 'verification-email-address-hour',
