@@ -11,6 +11,7 @@ import { useDatabase } from '../../database/client'
 import { icalSources, properties, auditLog } from '../../database/schema'
 import { validateIcalUrl } from '../../utils/ical/validate'
 import { getTrustedClientIp } from '../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../utils/validated-body'
 import { inngest } from '../../inngest/client'
 import { icalSyncRequested } from '../../inngest/events'
 
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId as string | undefined
   if (!userId) throw createError({ statusCode: 401, message: 'Απαιτείται σύνδεση' })
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const body = await readValidatedBodyFriendly(event, bodySchema)
 
   // ── Ανήκει το ακίνητο στον χρήστη; ──
   const [property] = await db

@@ -28,6 +28,17 @@ export function fullNumber(series: string, number: number, year: number): string
   return `${series}-${year}-${String(number).padStart(7, '0')}`
 }
 
+/** ISO timestamp (με ώρα) → '30/10/2026, 14:05' */
+export function grDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('el-GR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 /** Ημέρες μέχρι μια ISO ημερομηνία (0 αν πέρασε) */
 export function daysUntil(iso: string): number {
   const target = Date.parse(`${iso}T23:59:59+03:00`)

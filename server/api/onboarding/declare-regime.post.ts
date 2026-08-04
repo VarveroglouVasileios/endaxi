@@ -12,6 +12,7 @@ import { useDatabase } from '../../database/client'
 import { users, auditLog } from '../../database/schema'
 import { checkGate } from '../../utils/gate'
 import { getTrustedClientIp } from '../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../utils/validated-body'
 
 const bodySchema = z.object({
   propertyCount: z.number().int().min(0).max(999),
@@ -24,9 +25,9 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId as string | undefined
   if (!userId) throw createError({ statusCode: 401, message: 'Απαιτείται σύνδεση' })
 
-  const { propertyCount, isLegalEntity } = await readValidatedBody(
+  const { propertyCount, isLegalEntity } = await readValidatedBodyFriendly(
     event,
-    bodySchema.parse,
+    bodySchema,
   )
 
   const gate = checkGate({ propertyCount, isLegalEntity })

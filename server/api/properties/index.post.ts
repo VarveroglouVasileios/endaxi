@@ -5,6 +5,7 @@ import { properties, users, auditLog } from '../../database/schema'
 import { checkAddProperty } from '../../utils/gate'
 import { isUniqueAmaViolation } from '../../utils/db/unique-ama'
 import { getTrustedClientIp } from '../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../utils/validated-body'
 
 const bodySchema = z.object({
   ama: z.string().min(1, 'Ο ΑΜΑ είναι υποχρεωτικός').max(64),
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId as string | undefined
   if (!userId) throw createError({ statusCode: 401, message: 'Απαιτείται σύνδεση' })
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const body = await readValidatedBodyFriendly(event, bodySchema)
   const ipAddress = getTrustedClientIp(event)
   const userAgent = getRequestHeader(event, 'user-agent')
 

@@ -13,6 +13,7 @@ import { eq, and, count, inArray } from 'drizzle-orm'
 import { useDatabase } from '../../../database/client'
 import { stays, properties, takkDocuments, auditLog } from '../../../database/schema'
 import { getTrustedClientIp } from '../../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../../utils/validated-body'
 
 const bodySchema = z.object({
   isComplimentary: z.boolean(),
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
 
   if (!row) throw createError({ statusCode: 404, message: 'Δεν βρέθηκε η διαμονή' })
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const body = await readValidatedBodyFriendly(event, bodySchema)
 
   /**
    * ΒΡΕΘΗΚΕ ΣΕ ΔΙΚΟ ΜΟΥ SECURITY AUDIT (race condition / TOCTOU): ο παλιός

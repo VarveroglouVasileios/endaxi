@@ -15,6 +15,13 @@
       "when": 1785341779187,
       "tag": "0001_confused_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785873535965,
+      "tag": "0002_dear_darkstar",
+      "breakpoints": true
     }
   ]
 }

@@ -118,12 +118,21 @@ useHead({
           εσύ τα ελέγχεις πριν τα χρησιμοποιήσεις.
         </p>
 
-        <div class="mt-9 flex flex-wrap items-center gap-3">
+        <p class="mt-5">
+          <span
+            class="badge"
+            style="background: var(--color-ok-bg, var(--color-paper)); color: var(--color-ok)"
+          >
+            100% δωρεάν προς το παρόν
+          </span>
+        </p>
+
+        <div class="mt-6 flex flex-wrap items-center gap-3">
           <NuxtLink to="/register" class="btn-primary btn-lg">
             Ξεκίνα δωρεάν
           </NuxtLink>
           <span class="text-sm" style="color: var(--color-ink-muted)">
-            Χωρίς κάρτα για την εγγραφή
+            Χωρίς κάρτα, καμία χρέωση
           </span>
         </div>
       </div>
@@ -219,7 +228,8 @@ useHead({
     <section v-reveal class="mx-auto max-w-5xl px-5 py-20 text-center">
       <h2 class="text-3xl font-bold">Είσαι εντάξει.</h2>
       <p class="mx-auto mt-3 max-w-md" style="color: var(--color-ink-soft)">
-        Ξεκινάς σε δύο λεπτά και έχεις οργανωμένη εικόνα κάθε μήνα.
+        Ξεκινάς σε δύο λεπτά και έχεις οργανωμένη εικόνα κάθε μήνα —
+        100% δωρεάν προς το παρόν, χωρίς κάρτα.
       </p>
       <NuxtLink to="/register" class="btn-primary btn-lg mt-8">
         Ξεκίνα δωρεάν

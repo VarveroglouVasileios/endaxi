@@ -218,6 +218,15 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     window: '1 m',
     windowMs: 60_000,
   },
+  // Καλύπτει GET (λίστα), POST (νέα δημοσίευση) και POST comments — αρκετά
+  // γενναιόδωρο για κανονική χρήση, κόβει αυτοματοποιημένο spam.
+  {
+    id: 'feedback-minute',
+    prefix: '/api/feedback',
+    limit: 30,
+    window: '1 m',
+    windowMs: 60_000,
+  },
 ] as const
 
 /**

@@ -11,6 +11,7 @@ import { useDatabase } from '../../database/client'
 import { users, auditLog } from '../../database/schema'
 import { isValidAfm, normalizeAfm, afmError } from '../../utils/afm'
 import { getTrustedClientIp } from '../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../utils/validated-body'
 
 const bodySchema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId as string | undefined
   if (!userId) throw createError({ statusCode: 401, message: 'Απαιτείται σύνδεση' })
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const body = await readValidatedBodyFriendly(event, bodySchema)
 
   const patch: Record<string, unknown> = { updatedAt: new Date() }
 

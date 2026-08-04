@@ -430,6 +430,52 @@ export const takkDocuments = pgTable(
 )
 
 // ────────────────────────────────────────────────────────────
+// FEEDBACK — δημόσιο board σχολίων πελατών (τι αρέσει/δεν αρέσει/ιδέες)
+// ────────────────────────────────────────────────────────────
+
+export const feedbackTypeEnum = pgEnum('feedback_type', [
+  'positive', // Μου αρέσει
+  'negative', // Δεν μου αρέσει / πρόβλημα
+  'idea', // Πρόταση
+])
+
+export const feedbackPosts = pgTable(
+  'feedback_posts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    type: feedbackTypeEnum('type').notNull().default('idea'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('feedback_posts_created_idx').on(t.createdAt)],
+)
+
+export const feedbackComments = pgTable(
+  'feedback_comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => feedbackPosts.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    body: text('body').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('feedback_comments_post_idx').on(t.postId, t.createdAt)],
+)
+
+// ────────────────────────────────────────────────────────────
 // AUDIT LOG — ποιος, πότε, τι, από πού
 // ────────────────────────────────────────────────────────────
 
@@ -459,6 +505,18 @@ export const auditLog = pgTable(
 
 export const usersRelations = relations(users, ({ many }) => ({
   properties: many(properties),
+  feedbackPosts: many(feedbackPosts),
+  feedbackComments: many(feedbackComments),
+}))
+
+export const feedbackPostsRelations = relations(feedbackPosts, ({ one, many }) => ({
+  user: one(users, { fields: [feedbackPosts.userId], references: [users.id] }),
+  comments: many(feedbackComments),
+}))
+
+export const feedbackCommentsRelations = relations(feedbackComments, ({ one }) => ({
+  post: one(feedbackPosts, { fields: [feedbackComments.postId], references: [feedbackPosts.id] }),
+  user: one(users, { fields: [feedbackComments.userId], references: [users.id] }),
 }))
 
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
@@ -510,3 +568,7 @@ export type NewStay = typeof stays.$inferInsert
 export type TakkDocument = typeof takkDocuments.$inferSelect
 export type PropertyCategory = (typeof propertyCategoryEnum.enumValues)[number]
 export type StaySource = (typeof staySourceEnum.enumValues)[number]
+export type FeedbackPost = typeof feedbackPosts.$inferSelect
+export type NewFeedbackPost = typeof feedbackPosts.$inferInsert
+export type FeedbackComment = typeof feedbackComments.$inferSelect
+export type FeedbackType = (typeof feedbackTypeEnum.enumValues)[number]

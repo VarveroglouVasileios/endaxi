@@ -16,6 +16,7 @@ import { useDatabase } from '../../database/client'
 import { properties, takkDocuments, auditLog } from '../../database/schema'
 import { isUniqueAmaViolation } from '../../utils/db/unique-ama'
 import { getTrustedClientIp } from '../../utils/request-ip'
+import { readValidatedBodyFriendly } from '../../utils/validated-body'
 
 const bodySchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -40,7 +41,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'Λείπει το id' })
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const body = await readValidatedBodyFriendly(event, bodySchema)
 
   let updated: typeof properties.$inferSelect | undefined
   let hasIssued = false
