@@ -14,6 +14,10 @@ const REQUIRED_PRODUCTION_ENV = [
   'R2_SECRET_ACCESS_KEY',
   'R2_BUCKET',
   'TRUST_AZURE_PROXY',
+  // ΣΚΟΠΙΜΑ ΕΚΤΟΣ: RESEND_INBOUND_WEBHOOK_SECRET / INBOUND_EMAIL_DOMAIN.
+  // Το feature αυτόματης λήψης εισοδήματος (server/api/webhooks/
+  // resend-inbound.post.ts) είναι προαιρετικό — χωρίς αυτά τα δύο env
+  // vars ο webhook απαντά 503 αντί να μπλοκάρει ολόκληρο το boot.
 ] as const
 
 export default defineNitroPlugin(() => {

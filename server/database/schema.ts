@@ -60,6 +60,25 @@ export const taxRegimeEnum = pgEnum('tax_regime', [
   'business_3_plus', // 3+ ακίνητα ή νομικό πρόσωπο: επιτηδευματίας
 ])
 
+/**
+ * Πηγή του ποσού εισοδήματος μιας διαμονής (gross/fee/payout).
+ * 'manual'     = ο host το πληκτρολόγησε ο ίδιος
+ * 'email_auto' = αντλήθηκε αυτόματα από forwarded email κράτησης/payout
+ *                (βλ. server/api/webhooks/resend-inbound.post.ts)
+ */
+export const stayAmountSourceEnum = pgEnum('stay_amount_source', [
+  'manual',
+  'email_auto',
+])
+
+/** Αποτέλεσμα προσπάθειας ανάγνωσης ενός inbound email */
+export const inboundEmailStatusEnum = pgEnum('inbound_email_status', [
+  'matched', // βρέθηκε ποσό ΚΑΙ αντιστοιχίστηκε σε συγκεκριμένη διαμονή
+  'unmatched_stay', // βρέθηκε ποσό, αλλά καμία/πολλαπλές πιθανές διαμονές
+  'unrecognized_format', // δεν αναγνωρίστηκε ποσό/ημερομηνίες στο κείμενο
+  'unknown_recipient', // το token στο "προς" δεν αντιστοιχεί σε χρήστη
+])
+
 // ────────────────────────────────────────────────────────────
 // USERS
 // ────────────────────────────────────────────────────────────
@@ -294,6 +313,8 @@ export const stays = pgTable(
     platformFeeCents: bigint('platform_fee_cents', { mode: 'number' }),
     payoutAmountCents: bigint('payout_amount_cents', { mode: 'number' }),
     currency: text('currency').default('EUR'),
+    /** Πώς γέμισε το gross/fee/payout — χειροκίνητα ή από forwarded email */
+    amountSource: stayAmountSourceEnum('amount_source').notNull().default('manual'),
 
     rawPayload: jsonb('raw_payload'),
 
@@ -500,6 +521,42 @@ export const auditLog = pgTable(
 )
 
 // ────────────────────────────────────────────────────────────
+// INBOUND EMAILS — audit κάθε προσπάθειας auto-reconciliation
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Κάθε email που προωθεί ο host στη δική του διεύθυνση
+ * (π.χ. vasilis-x7k2@in.endaxi.app) καταγράφεται εδώ — είτε πέτυχε το
+ * matching είτε όχι. Χρήσιμο για debugging (τα templates της Airbnb/
+ * Booking αλλάζουν χωρίς προειδοποίηση) και ως ασφάλεια: ο host δεν
+ * χάνει ποτέ σιωπηλά ένα email — μένει καταγεγραμμένο.
+ *
+ * ΔΕΝ αποθηκεύουμε ολόκληρο το HTML (PII/μέγεθος) — μόνο ένα σύντομο
+ * απόσπασμα, αρκετό για να καταλάβει κανείς τι πήγε στραβά.
+ */
+export const inboundEmails = pgTable(
+  'inbound_emails',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    toAddress: text('to_address').notNull(),
+    fromAddress: text('from_address'),
+    subject: text('subject'),
+    status: inboundEmailStatusEnum('status').notNull(),
+    parsedAmountCents: bigint('parsed_amount_cents', { mode: 'number' }),
+    parsedCheckIn: date('parsed_check_in'),
+    parsedCheckOut: date('parsed_check_out'),
+    matchedStayId: uuid('matched_stay_id').references(() => stays.id, { onDelete: 'set null' }),
+    textExcerpt: text('text_excerpt'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('inbound_emails_user_idx').on(t.userId, t.receivedAt),
+    index('inbound_emails_status_idx').on(t.status),
+  ],
+)
+
+// ────────────────────────────────────────────────────────────
 // RELATIONS
 // ────────────────────────────────────────────────────────────
 
@@ -572,3 +629,7 @@ export type FeedbackPost = typeof feedbackPosts.$inferSelect
 export type NewFeedbackPost = typeof feedbackPosts.$inferInsert
 export type FeedbackComment = typeof feedbackComments.$inferSelect
 export type FeedbackType = (typeof feedbackTypeEnum.enumValues)[number]
+export type StayAmountSource = (typeof stayAmountSourceEnum.enumValues)[number]
+export type InboundEmail = typeof inboundEmails.$inferSelect
+export type NewInboundEmail = typeof inboundEmails.$inferInsert
+export type InboundEmailStatus = (typeof inboundEmailStatusEnum.enumValues)[number]

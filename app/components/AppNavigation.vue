@@ -51,6 +51,9 @@ onBeforeUnmount(() => {
       <NuxtLink to="/app/diamones" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">
         Διαμονές
       </NuxtLink>
+      <NuxtLink to="/app/eisodima" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">
+        Εισόδημα
+      </NuxtLink>
       <NuxtLink to="/app/akinita" class="btn-ghost shrink-0 !px-2.5 sm:!px-3.5">
         Ακίνητα
       </NuxtLink>

@@ -13,9 +13,40 @@ interface Me {
   taxRegime: string
   declaredPropertyCount: number
   canIssue: boolean
+  inboundEmailToken: string | null
 }
 
 const { data: me, refresh } = await useFetch<Me>('/api/me')
+
+// ── Αυτόματη λήψη ποσών εισοδήματος (forwarding address) ──
+const INBOUND_DOMAIN = 'in.endaxi.app'
+const inboundAddress = computed(() =>
+  me.value?.inboundEmailToken ? `${me.value.inboundEmailToken}@${INBOUND_DOMAIN}` : null,
+)
+const generatingToken = ref(false)
+const tokenError = ref<string | null>(null)
+const copied = ref(false)
+
+async function generateInboundAddress() {
+  tokenError.value = null
+  generatingToken.value = true
+  try {
+    await $fetch('/api/me/inbound-token', { method: 'POST' })
+    await refresh()
+  } catch (e) {
+    const err = e as { data?: { data?: { message?: string } } }
+    tokenError.value = err.data?.data?.message ?? 'Κάτι πήγε στραβά.'
+  } finally {
+    generatingToken.value = false
+  }
+}
+
+async function copyAddress() {
+  if (!inboundAddress.value) return
+  await navigator.clipboard.writeText(inboundAddress.value)
+  copied.value = true
+  setTimeout(() => (copied.value = false), 2000)
+}
 
 const form = reactive({
   name: me.value?.name ?? '',
@@ -171,6 +202,56 @@ async function save() {
         Αν αποκτήσεις τρίτο ακίνητο αλλάζει το καθεστώς σου και χρειάζεσαι
         βιβλία, ΦΠΑ και διαβίβαση myDATA. Μίλα με τον λογιστή σου πρώτα.
       </p>
+    </div>
+
+    <!-- Αυτόματη λήψη ποσών εισοδήματος -->
+    <div class="card mt-6">
+      <h2 class="text-sm font-bold">Αυτόματη λήψη ποσών (Εισόδημα)</h2>
+      <p class="mt-2 text-sm" style="color: var(--color-ink-soft)">
+        Το iCal δεν περιέχει τιμές, οπότε δεν μπορούμε να δούμε πόσο εισέπραξες
+        από κάθε κράτηση. Αν προωθείς εδώ τα emails κράτησης/payout της
+        Airbnb ή Booking.com, προσπαθούμε να διαβάσουμε αυτόματα το ποσό και
+        να συμπληρώσουμε τη σελίδα
+        <NuxtLink to="/app/eisodima" class="font-medium underline">Εισόδημα</NuxtLink>.
+      </p>
+
+      <div v-if="inboundAddress" class="mt-4">
+        <label class="label">Η διεύθυνσή σου</label>
+        <div class="flex items-center gap-2">
+          <input :value="inboundAddress" class="input tnum" readonly />
+          <button type="button" class="btn-secondary shrink-0 !px-3 text-xs" @click="copyAddress">
+            {{ copied ? '✓ Αντιγράφηκε' : 'Αντιγραφή' }}
+          </button>
+        </div>
+        <p class="hint mt-2">
+          Στήσε έναν κανόνα προώθησης στο Gmail/Outlook σου για τα emails από
+          την Airbnb/Booking προς αυτή τη διεύθυνση. Κάθε ασυνήθιστο ή
+          μη-αναγνωρίσιμο email απλά αγνοείται με ασφάλεια — δεν παίρνει ποτέ
+          λάθος ποσό. Ό,τι δεν αναγνωριστεί αυτόματα, το καταχωρείς χειροκίνητα
+          όπως και σήμερα.
+        </p>
+        <button
+          type="button"
+          class="btn-ghost mt-2 !px-3 text-xs"
+          :disabled="generatingToken"
+          @click="generateInboundAddress"
+        >
+          {{ generatingToken ? '…' : 'Νέα διεύθυνση (η παλιά σταματά να λειτουργεί)' }}
+        </button>
+      </div>
+
+      <div v-else class="mt-4">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="generatingToken"
+          @click="generateInboundAddress"
+        >
+          {{ generatingToken ? 'Δημιουργία…' : 'Δημιουργία διεύθυνσης' }}
+        </button>
+      </div>
+
+      <p v-if="tokenError" class="notice-danger mt-3">{{ tokenError }}</p>
     </div>
   </div>
 </template>

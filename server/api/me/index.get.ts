@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     legalAddressPostalCode: u.legalAddressPostalCode,
     taxRegime: u.taxRegime,
     declaredPropertyCount: u.declaredPropertyCount,
+    inboundEmailToken: u.inboundEmailToken,
     /**
      * Είναι έτοιμος να εκδίδει παραστατικά;
      * Το UI το χρησιμοποιεί για να δείξει προειδοποίηση πριν χαθούν κρατήσεις.

@@ -22,6 +22,13 @@
       "when": 1785873535965,
       "tag": "0002_dear_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785922309550,
+      "tag": "0003_tired_tomas",
+      "breakpoints": true
     }
   ]
 }

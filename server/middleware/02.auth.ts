@@ -14,6 +14,12 @@ const PUBLIC_PREFIXES = [
   '/api/inngest',
   '/api/_',
   '/api/health',
+  /**
+   * Καλείται από τον Resend, όχι από browser session — η αυθεντικοποίηση
+   * είναι η svix HMAC υπογραφή ΜΕΣΑ στο handler (βλ.
+   * server/api/webhooks/resend-inbound.post.ts), όχι session cookie.
+   */
+  '/api/webhooks',
 ]
 
 export default defineEventHandler(async (event) => {

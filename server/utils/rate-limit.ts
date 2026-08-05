@@ -227,6 +227,18 @@ export const RATE_LIMIT_RULES: readonly RateLimitRule[] = [
     window: '1 m',
     windowMs: 60_000,
   },
+  // Ανοιχτό endpoint (καλείται από τον Resend, όχι από συνδεδεμένο χρήστη —
+  // δεν έχει session/IP σταθερό ανά host). Global όριο, όχι per-IP: η
+  // υπογραφή (svix HMAC) είναι η πραγματική άμυνα, αυτό είναι μόνο
+  // circuit-breaker για μαζική κατάχρηση του parsing/DB.
+  {
+    id: 'resend-inbound-webhook-minute',
+    prefix: '/api/webhooks/resend-inbound',
+    limit: 120,
+    window: '1 m',
+    windowMs: 60_000,
+    global: true,
+  },
 ] as const
 
 /**
