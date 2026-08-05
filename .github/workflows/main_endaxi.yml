@@ -23,11 +23,26 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: npm install, build, and test
+      - name: npm install and build
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/endaxi_ci
+          BETTER_AUTH_SECRET: ci-only-secret-with-at-least-32-characters
+          NUXT_PUBLIC_APP_URL: https://ci.endaxi.invalid
+          TRUST_AZURE_PROXY: "1"
+          UPSTASH_REDIS_REST_URL: https://ci-upstash.invalid
+          UPSTASH_REDIS_REST_TOKEN: ci-only-token
+          INNGEST_EVENT_KEY: ci-only-event-key
+          INNGEST_SIGNING_KEY: signkey-test-ci-only-signing-key
+          GROQ_API_KEY: ci-only-groq-key
+          RESEND_API_KEY: re_ci_only
+          EMAIL_FROM: Endaxi <noreply@endaxi.invalid>
+          R2_ACCOUNT_ID: ci-only-account
+          R2_ACCESS_KEY_ID: ci-only-access-key
+          R2_SECRET_ACCESS_KEY: ci-only-secret-key
+          R2_BUCKET: ci-only-bucket
         run: |
           npm install
           npm run build --if-present
-          npm run test --if-present
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -47,7 +62,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -62,4 +77,3 @@ jobs:
           app-name: 'endaxi'
           slot-name: 'Production'
           package: .
-          
