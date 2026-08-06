@@ -33,17 +33,20 @@ const { data: staysList, refresh } = await useFetch<Stay[]>('/api/stays')
 
 const busy = ref<string | null>(null)
 const error = ref<string | null>(null)
+const { confirm } = useConfirmDialog()
 
 async function toggleComplimentary(s: Stay) {
   error.value = null
 
   if (!s.isComplimentary) {
-    const ok = confirm(
-      `Σήμανση ως δωρεάν διαμονή;\n\n` +
-        `${grDate(s.checkIn)} → ${grDate(s.checkOut)}\n\n` +
-        `Δεν θα εκδοθεί ΤΑΚΚ (${formatCents(s.estimatedAmountCents)}).\n` +
-        `Ο νόμος εξαιρεί τις δωρεάν διαμονές.`,
-    )
+    const ok = await confirm({
+      title: 'Σήμανση ως δωρεάν διαμονή;',
+      message:
+        `${grDate(s.checkIn)} → ${grDate(s.checkOut)}\n\n`
+        + `Δεν θα εκδοθεί ΤΑΚΚ (${formatCents(s.estimatedAmountCents)}).\n`
+        + `Ο νόμος εξαιρεί τις δωρεάν διαμονές.`,
+      confirmLabel: 'Σήμανση ως δωρεάν',
+    })
     if (!ok) return
   }
 

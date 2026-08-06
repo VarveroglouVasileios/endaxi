@@ -6,7 +6,7 @@
 import { z } from 'zod'
 import { eq, desc, and, sql } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
-import { takkDocuments, properties } from '../../database/schema'
+import { takkDocuments, properties, stays } from '../../database/schema'
 import { getRemittanceDeadline } from '../../utils/takk/calculator'
 
 const querySchema = z.object({
@@ -48,9 +48,18 @@ export default defineEventHandler(async (event) => {
       remittancePeriod: takkDocuments.remittancePeriod,
       hasPdf: sql<boolean>`${takkDocuments.pdfStorageKey} is not null`,
       cancelsDocumentId: takkDocuments.cancelsDocumentId,
+      /**
+       * ΣΥΝΔΕΣΗ ΜΕ ΤΟ ΕΙΣΟΔΗΜΑ: δείχνουμε δίπλα σε κάθε παραστατικό ΤΑΚΚ
+       * αν έχει καταχωρηθεί το δηλωτέο ποσό ενοικίου για την ίδια διαμονή
+       * — έτσι ο host βλέπει με μια ματιά ποιες διαμονές έχουν εκκρεμότητα
+       * και στα δύο (ΤΑΚΚ εκδόθηκε, αλλά εισόδημα λείπει).
+       */
+      stayId: takkDocuments.stayId,
+      stayGrossAmountCents: stays.grossAmountCents,
     })
     .from(takkDocuments)
     .innerJoin(properties, eq(takkDocuments.propertyId, properties.id))
+    .leftJoin(stays, eq(takkDocuments.stayId, stays.id))
     .where(and(...filters))
     .orderBy(desc(takkDocuments.remittancePeriod), desc(takkDocuments.number))
     .limit(500)

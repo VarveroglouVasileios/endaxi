@@ -27,6 +27,8 @@ interface Doc {
   guestName: string | null
   totalAmountCents: number
   hasPdf: string | null
+  stayId: string | null
+  stayGrossAmountCents: number | null
 }
 
 interface Period {
@@ -55,6 +57,7 @@ const [
 const current = computed(() => data.value?.periods[0] ?? null)
 
 const downloading = ref<string | null>(null)
+const { error: toastError } = useToast()
 
 async function download(id: string) {
   downloading.value = id
@@ -63,7 +66,7 @@ async function download(id: string) {
     window.open(url, '_blank')
   } catch (e) {
     const err = e as { data?: { data?: { message?: string } } }
-    alert(err.data?.data?.message ?? 'Δεν ήταν δυνατή η λήψη.')
+    toastError(err.data?.data?.message ?? 'Δεν ήταν δυνατή η λήψη.')
   } finally {
     downloading.value = null
   }
@@ -158,6 +161,17 @@ async function download(id: string) {
               <p class="text-xs" style="color: var(--color-ink-muted)">
                 {{ d.propertyName }}
               </p>
+
+              <!-- Σύνδεση με το Εισόδημα: το ΤΑΚΚ είναι ξεχωριστό από το -->
+              <!-- πραγματικό ενοίκιο — υπενθυμίζουμε αν λείπει το δεύτερο. -->
+              <NuxtLink
+                v-if="d.documentType === 'takk_receipt' && d.stayGrossAmountCents == null"
+                :to="`/app/eisodima?year=${new Date(d.checkIn).getFullYear()}`"
+                class="mt-1 inline-block text-xs font-medium underline"
+                style="color: var(--color-warn)"
+              >
+                Λείπει το δηλωτέο ποσό ενοικίου →
+              </NuxtLink>
             </div>
 
             <div class="flex shrink-0 items-center justify-between gap-3 sm:justify-end">

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { authClient } from '~/lib/auth-client'
+
 const route = useRoute()
 const { openPreferences: openCookiePreferences } = useCookieConsent()
 const isAppArea = computed(
@@ -6,6 +8,18 @@ const isAppArea = computed(
     || route.path.startsWith('/app/')
     || route.path.startsWith('/onboarding'),
 )
+
+/**
+ * ΒΡΕΘΗΚΕ: το header έδειχνε πάντα «Σύνδεση / Ξεκίνα δωρεάν» εκτός
+ * /app-/onboarding — ΑΚΟΜΑ ΚΙ ΑΝ ο χρήστης ήταν ήδη συνδεδεμένος (π.χ.
+ * επέστρεφε στην αρχική σελίδα). Ο έλεγχος βασιζόταν ΜΟΝΟ στο path, ποτέ
+ * στην πραγματική κατάσταση σύνδεσης — έδειχνε σαν να «αποσυνδεόταν».
+ * Η session ζει σε http-only cookie (Better Auth) — ΟΧΙ localStorage —
+ * οπότε το `useSession` εδώ απλά τη διαβάζει, δεν αποθηκεύει τίποτα.
+ */
+const { data: session } = await authClient.useSession(useFetch)
+const isAuthenticated = computed(() => Boolean(session.value?.user?.emailVerified))
+const showAppNav = computed(() => isAppArea.value || isAuthenticated.value)
 </script>
 
 <template>
@@ -29,7 +43,7 @@ const isAppArea = computed(
         <NuxtLink to="/" class="eyebrow shrink-0">Endaxi</NuxtLink>
 
         <div class="flex min-w-0 items-center gap-1">
-          <ClientOnly v-if="isAppArea">
+          <ClientOnly v-if="showAppNav">
             <LazyAppNavigation />
             <template #fallback>
               <nav class="flex h-11 min-w-0 items-center gap-1" aria-hidden="true" />
@@ -241,6 +255,8 @@ const isAppArea = computed(
     <ClientOnly>
       <CookieConsent />
       <ChatWidgetLoader />
+      <ConfirmDialogHost />
+      <ToastHost />
     </ClientOnly>
   </div>
 </template>

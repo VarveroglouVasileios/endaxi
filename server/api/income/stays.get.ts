@@ -8,9 +8,9 @@
  */
 
 import { z } from 'zod'
-import { eq, and, gte, lte, ne, desc } from 'drizzle-orm'
+import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm'
 import { useDatabase } from '../../database/client'
-import { stays, properties } from '../../database/schema'
+import { stays, properties, takkDocuments } from '../../database/schema'
 
 const querySchema = z.object({
   year: z.coerce
@@ -62,5 +62,44 @@ export default defineEventHandler(async (event) => {
     .orderBy(desc(stays.checkIn))
     .limit(500)
 
-  return rows
+  /**
+   * ΣΥΝΔΕΣΗ ΜΕ ΤΑ ΠΑΡΑΣΤΑΤΙΚΑ ΤΑΚΚ: για κάθε διαμονή δείχνουμε αν έχει
+   * ήδη εκδοθεί το ειδικό στοιχείο ΤΑΚΚ — έτσι ο host βλέπει στο ίδιο
+   * σημείο και τα δύο πράγματα που πρέπει να κάνει για μια κράτηση
+   * (ΤΑΚΚ αυτόματο, εισόδημα χειροκίνητο) αντί να ψάχνει σε άλλη σελίδα.
+   * Μία διαμονή μπορεί να έχει >1 παραστατικά αν διασχίζει μήνα.
+   */
+  const stayIds = rows.map(r => r.id)
+  const docsByStay = new Map<
+    string,
+    { id: string; series: string; number: number; year: number; hasPdf: boolean }[]
+  >()
+
+  if (stayIds.length > 0) {
+    const docs = await db
+      .select({
+        id: takkDocuments.id,
+        stayId: takkDocuments.stayId,
+        series: takkDocuments.series,
+        number: takkDocuments.number,
+        year: takkDocuments.year,
+        hasPdf: sql<boolean>`${takkDocuments.pdfStorageKey} is not null`,
+      })
+      .from(takkDocuments)
+      .where(
+        and(
+          inArray(takkDocuments.stayId, stayIds),
+          eq(takkDocuments.documentType, 'takk_receipt'),
+        ),
+      )
+
+    for (const d of docs) {
+      if (!d.stayId) continue
+      const list = docsByStay.get(d.stayId) ?? []
+      list.push({ id: d.id, series: d.series, number: d.number, year: d.year, hasPdf: d.hasPdf })
+      docsByStay.set(d.stayId, list)
+    }
+  }
+
+  return rows.map(r => ({ ...r, documents: docsByStay.get(r.id) ?? [] }))
 })

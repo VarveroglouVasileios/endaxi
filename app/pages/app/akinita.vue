@@ -83,10 +83,25 @@ async function save(id: string) {
   }
 }
 
+const { confirm } = useConfirmDialog()
+const { error: toastError } = useToast()
+
 async function disconnect(id: string) {
-  if (!confirm('Να σταματήσει ο συγχρονισμός; Τα παραστατικά σου παραμένουν.')) return
-  await $fetch(`/api/ical-sources/${id}`, { method: 'DELETE' })
-  await refresh()
+  const ok = await confirm({
+    title: 'Αποσύνδεση ημερολογίου;',
+    message: 'Θα σταματήσει ο συγχρονισμός. Τα παραστατικά που έχουν ήδη εκδοθεί παραμένουν.',
+    confirmLabel: 'Αποσύνδεση',
+    danger: true,
+  })
+  if (!ok) return
+
+  try {
+    await $fetch(`/api/ical-sources/${id}`, { method: 'DELETE' })
+    await refresh()
+  } catch (e) {
+    const err = e as { data?: { data?: { message?: string } } }
+    toastError(err.data?.data?.message ?? 'Δεν ήταν δυνατή η αποσύνδεση.')
+  }
 }
 </script>
 

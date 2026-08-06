@@ -16,7 +16,15 @@
 definePageMeta({ middleware: 'auth' })
 useSeoMeta({ title: 'Δηλωτέο εισόδημα — Εντάξει', robots: 'noindex' })
 
-import { formatCents, grDate } from '~/utils/format'
+import { formatCents, grDate, fullNumber } from '~/utils/format'
+
+interface StayDocument {
+  id: string
+  series: string
+  number: number
+  year: number
+  hasPdf: boolean
+}
 
 interface StayRow {
   id: string
@@ -32,6 +40,23 @@ interface StayRow {
   platformFeeCents: number | null
   payoutAmountCents: number | null
   amountSource: 'manual' | 'email_auto'
+  documents: StayDocument[]
+}
+
+const { error: toastError } = useToast()
+const downloadingDoc = ref<string | null>(null)
+
+async function downloadDocument(id: string) {
+  downloadingDoc.value = id
+  try {
+    const { url } = await $fetch<{ url: string }>(`/api/documents/${id}/download`)
+    window.open(url, '_blank')
+  } catch (e) {
+    const err = e as { data?: { data?: { message?: string } } }
+    toastError(err.data?.data?.message ?? 'Δεν ήταν δυνατή η λήψη.')
+  } finally {
+    downloadingDoc.value = null
+  }
 }
 
 interface Summary {
@@ -50,8 +75,18 @@ interface Summary {
 }
 
 const currentYear = new Date().getFullYear()
-const year = ref(currentYear)
-const years = computed(() => [currentYear, currentYear - 1, currentYear - 2])
+const route = useRoute()
+// Επιτρέπει βαθύ σύνδεσμο από το dashboard (/app/eisodima?year=2026)
+// όταν λείπει το δηλωτέο ποσό ενός συγκεκριμένου παραστατικού.
+const queryYear = Number(route.query.year)
+const initialYear
+  = Number.isInteger(queryYear) && queryYear >= 2024 && queryYear <= 2100 ? queryYear : currentYear
+const year = ref(initialYear)
+const years = computed(() => {
+  const list = [currentYear, currentYear - 1, currentYear - 2]
+  if (!list.includes(year.value)) list.unshift(year.value)
+  return list
+})
 
 const { data: summary, refresh: refreshSummary } = await useFetch<Summary>('/api/income/summary', {
   query: { year },
@@ -243,6 +278,26 @@ const estimatedTaxCents = computed(() => estimateTaxCents(summary.value?.totalGr
           <p class="mt-1 truncate text-xs" style="color: var(--color-ink-muted)">
             {{ s.propertyName }}
             <template v-if="s.guestName"> · {{ s.guestName }}</template>
+          </p>
+
+          <!-- Σύνδεση με το αντίστοιχο παραστατικό ΤΑΚΚ -->
+          <div v-if="s.documents.length" class="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="d in s.documents"
+              :key="d.id"
+              type="button"
+              class="badge tnum"
+              style="background: var(--color-ok-bg); color: var(--color-ok); cursor: pointer"
+              :disabled="!d.hasPdf || downloadingDoc === d.id"
+              :title="d.hasPdf ? 'Λήψη PDF παραστατικού ΤΑΚΚ' : 'Το PDF ετοιμάζεται'"
+              @click="downloadDocument(d.id)"
+            >
+              ΤΑΚΚ {{ fullNumber(d.series, d.number, d.year) }}
+              {{ downloadingDoc === d.id ? '…' : '↓' }}
+            </button>
+          </div>
+          <p v-else class="mt-1.5 text-xs" style="color: var(--color-ink-muted)">
+            Παραστατικό ΤΑΚΚ: εκκρεμεί ή δεν ισχύει ακόμα
           </p>
         </div>
 
